@@ -5,7 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 const TEST_ACCOUNTS = [
   { email: 'admin@sport.ru', password: 'admin123', role: 'Администратор' },
   { email: 'coach@sport.ru', password: 'coach123', role: 'Тренер' },
-  { email: 'athlete@sport.ru', password: 'athlete123', role: 'Спортсмен' },
+  { email: 'athlete@sport.ru', password:  'athlete123', role: 'Спортсмен' },
   { email: 'judge@sport.ru', password: 'judge123', role: 'Судья' },
 ];
 

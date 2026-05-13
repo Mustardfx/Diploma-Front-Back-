@@ -1,4 +1,4 @@
-import {
+nimport {
   Controller, Get, Post, Patch, Delete,
   Param, Body, Query, UseGuards, HttpCode, HttpStatus,
 } from '@nestjs/common';
@@ -26,7 +26,7 @@ export class SectionsController {
   findMine(@CurrentUser('id') coachId: string) {
     return this.sectionsService.findByCoach(coachId);
   }
-
+  
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.sectionsService.findOne(id);
