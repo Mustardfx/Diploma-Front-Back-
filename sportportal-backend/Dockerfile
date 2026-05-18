@@ -1,0 +1,7 @@
+FROM postgres:16
+
+ENV POSTGRES_USER=${DB_USERNAME}
+ENV POSTGRES_PASSWORD=${DB_PASSWORD}
+ENV POSTGRES_DB=${DB_NAME}
+
+# COPY ./init.sql /docker-entrypoint-initdb.d/

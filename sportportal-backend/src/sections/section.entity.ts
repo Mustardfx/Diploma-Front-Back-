@@ -21,7 +21,7 @@ export class Section {
   @Column()
   sport: string;
 
-  @Column({ name: 'coach_id' })
+  @Column({ name: 'coach_id', nullable: true })
   coachId: string;
 
   @ManyToOne(() => User)

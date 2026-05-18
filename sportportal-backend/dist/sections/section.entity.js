@@ -28,7 +28,7 @@ __decorate([
     __metadata("design:type", String)
 ], Section.prototype, "sport", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ name: 'coach_id' }),
+    (0, typeorm_1.Column)({ name: 'coach_id', nullable: true }),
     __metadata("design:type", String)
 ], Section.prototype, "coachId", void 0);
 __decorate([
