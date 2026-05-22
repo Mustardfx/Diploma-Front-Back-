@@ -19,7 +19,7 @@ export class SectionsController {
   findAll(@Query() filter: SectionFilterDto) {
     return this.sectionsService.findAll(filter);
   }
-
+  
   @Get('my')
   @UseGuards(RolesGuard)
   @Roles(UserRole.COACH, UserRole.ADMIN)
@@ -37,7 +37,7 @@ export class SectionsController {
   @Roles(UserRole.COACH, UserRole.ADMIN)
   create(
     @Body() dto: CreateSectionDto,
-    @CurrentUser('id') coachId: string,
+    @CurrentUser('sub') coachId: string,
   ) {
     return this.sectionsService.create(dto, coachId);
   }

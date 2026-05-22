@@ -6,6 +6,7 @@ const ATTENDANCE_KEY = 'sport_attendance';
 
 const DAY_NAMES = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 
+
 // ==================== МОКОВЫЕ ДАННЫЕ ====================
 const DEFAULT_SECTIONS: Section[] = [
   {
