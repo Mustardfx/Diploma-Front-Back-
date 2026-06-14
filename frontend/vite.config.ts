@@ -8,6 +8,11 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react()],
     server: {
+      host: '0.0.0.0',   // ← add this
+      port: 5173,         // ← add this
+      watch: {
+        usePolling: true, // ← add this for Docker
+      },
       proxy: {
         '/api': {
           target: backendUrl,

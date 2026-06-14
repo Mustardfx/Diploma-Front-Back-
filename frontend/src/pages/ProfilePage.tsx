@@ -2,10 +2,7 @@ import { useEffect, useState } from 'react';
 import { MainLayout } from '../components/layout/MainLayout';
 import { useAuth } from '../context/AuthContext';
 import { enrollmentService, sectionService, attendanceService } from '../services/sectionService';
-import { Section } from '../types';
-import { api } from '../services/api';
-// const { sections, fetchSections } = useSections.default();
-import useSections from "../composables/useSections";
+
 const ROLE_LABELS: Record<string, string> = {
   admin: 'Администратор',
   coach: 'Тренер',
@@ -14,7 +11,6 @@ const ROLE_LABELS: Record<string, string> = {
 };
 
 export function ProfilePage() {
-  const { loading, error, sections, fetchSections } = useSections();
   const { user, updateProfile, hasRole } = useAuth();
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({

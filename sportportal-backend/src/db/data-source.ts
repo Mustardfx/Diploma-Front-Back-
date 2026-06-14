@@ -4,7 +4,7 @@ dotenv.config();
 
 export const dataSourceOptions: DataSourceOptions = {
   type: 'postgres',
-  host: process.env.DB_HOST || 'localhost',
+  host: process.env.DB_HOST || 'sportportal-db',
   port: parseInt(process.env.DB_PORT) || 5432,
   username: process.env.DB_USERNAME || 'sportportal',
   password: process.env.DB_PASSWORD || 'pass123',

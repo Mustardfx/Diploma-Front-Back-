@@ -1,7 +1,19 @@
-FROM postgres:16
+# 1. Используем официальный легкий образ Node.js
+FROM node:18
 
-ENV POSTGRES_USER=${DB_USERNAME}
-ENV POSTGRES_PASSWORD=${DB_PASSWORD}
-ENV POSTGRES_DB=${DB_NAME}
+# 2. Указываем рабочую директорию внутри контейнера
+WORKDIR /src
 
-# COPY ./init.sql /docker-entrypoint-initdb.d/
+# 3. Копируем ТОЛЬКО файлы зависимостей
+COPY package*.json ./
+
+# 4. Устанавливаем зависимости (этот шаг закэшируется, если package.json не менялся)
+RUN npm install
+
+# 5. Копируем весь остальной исходный код проекта
+COPY . .
+
+# 6. Открываем порт, который использует ваш NestJS (из docker-compose это 8080)
+EXPOSE 8080
+
+# Инструкция CMD не нужна, так как команда запуска `npm run dev` уже прописана в вашем docker-compose.yml

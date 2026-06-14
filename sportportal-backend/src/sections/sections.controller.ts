@@ -37,7 +37,7 @@ export class SectionsController {
   @Roles(UserRole.COACH, UserRole.ADMIN)
   create(
     @Body() dto: CreateSectionDto,
-    @CurrentUser('sub') coachId: string,
+    @CurrentUser('id') coachId: string,
   ) {
     return this.sectionsService.create(dto, coachId);
   }

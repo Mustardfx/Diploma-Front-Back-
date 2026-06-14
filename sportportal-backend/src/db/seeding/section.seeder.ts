@@ -11,10 +11,10 @@ import { Section } from '../../sections/section.entity';
         const rep = dataSource.getRepository(Section);
         await rep.insert([
             {
-                name: 'Вольная борьба',
-                sport: 'Борьба',
-                description: 'Секция по вольной борьбе для начинающих и опытных спортсменов. Развиваем силу, ловкость и стратегическое мышление.',
-                location: 'ГК',
+                name: 'Баскетболл', 
+                sport: 'Баскетбол',
+                description: 'Секция по баскетболу для начинающих и опытных спортсменов. Развиваем навыки игры, командный дух и стратегическое мышление.',
+                location: 'ГK',
                 schedule: [
                     { dayOfWeek: 0, timeStart: '09:00', timeEnd: '11:00' },
                     { dayOfWeek: 2, timeStart: '09:00', timeEnd: '11:00' },
@@ -27,10 +27,10 @@ import { Section } from '../../sections/section.entity';
                 isActive: true,
             },
             {
-                name: 'Греко-римская борьба',
-                sport: 'Борьба',
-                description: 'Классическая борьба. Техника, дисциплина, командный дух. Подготовка к региональным соревнованиям.',
-                location: 'ГК',
+                name: 'Волейболл',
+                sport: 'Волейбол',
+                description: 'Секция по волейболу для начинающих и опытных спортсменов. Развиваем навыки игры, командный дух и стратегическое мышление.',
+                location: 'ГK',
                 schedule: [
                     { dayOfWeek: 1, timeStart: '14:00', timeEnd: '16:00' },
                     { dayOfWeek: 3, timeStart: '14:00', timeEnd: '16:00' },
@@ -43,10 +43,10 @@ import { Section } from '../../sections/section.entity';
                 isActive: true,
             },
             {
-                name: 'Бокс',
-                sport: 'Бокс',
-                description: 'Профессиональная подготовка боксёров. Работа с тренером, спарринги, общефизическая подготовка.',
-                location: 'ГК',
+                name: 'Футболл',
+                sport: 'Футболл',
+                description: 'Секция по футбольной игре для начинающих и опытных спортсменов. Развиваем навыки игры, командный дух и стратегическое мышление.',
+                location: 'ГK',
                 schedule: [
                     { dayOfWeek: 0, timeStart: '17:00', timeEnd: '19:00' },
                     { dayOfWeek: 2, timeStart: '17:00', timeEnd: '19:00' },
@@ -59,10 +59,10 @@ import { Section } from '../../sections/section.entity';
                 isActive: true,
             },
             {
-                name: 'Плавание (продвинутый)',
-                sport: 'Плавание',
-                description: 'Секция для опытных пловцов. Совершенствование техники всех стилей плавания, подготовка к соревнованиям.',
-                location: 'ГК',
+                name: 'ПинПонг',
+                sport: 'ПинПонг',
+                description: 'Секция по пин-понгу для начинающих и опытных спортсменов. Развиваем навыки игры, стратегическое мышление и реакцию.',
+                location: 'ГK',
                 schedule: [
                     { dayOfWeek: 1, timeStart: '07:00', timeEnd: '09:00' },
                     { dayOfWeek: 3, timeStart: '07:00', timeEnd: '09:00' },
@@ -75,10 +75,10 @@ import { Section } from '../../sections/section.entity';
                 isActive: true,
             },
             {
-                name: 'Лёгкая атлетика',
-                sport: 'Лёгкая атлетика',
-                description: 'Бег, прыжки, метания. Развитие выносливости и скоростных качеств. Участие в городских соревнованиях.',
-                location: 'ГК',
+                name: 'Шахматы',
+                sport: 'Шахматы',
+                description: 'Секция по шахматам для начинающих и опытных игроков. Развиваем стратегическое мышление и тактические навыки.',
+                location: 'ГK',
                 schedule: [
                     { dayOfWeek: 0, timeStart: '08:00', timeEnd: '10:00' },
                     { dayOfWeek: 2, timeStart: '08:00', timeEnd: '10:00' },
