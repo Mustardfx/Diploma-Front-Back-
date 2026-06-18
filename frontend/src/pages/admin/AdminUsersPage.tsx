@@ -1,7 +1,8 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { MainLayout } from '../../components/layout/MainLayout';
 import { useAuth } from '../../context/AuthContext';
 import { authService } from '../../services/authService';
+import { apiUserService } from '../../services/apiUserService';
 import type { AuthUser, UserRole } from '../../types';
 
 const ROLES: { value: UserRole; label: string; color: string }[] = [
@@ -86,15 +87,24 @@ function AddUserModal({ onClose, onSave }: { onClose: () => void; onSave: () => 
 }
 
 export function AdminUsersPage() {
-  const { user: currentUser } = useAuth();
+  const { user: currentUser, backendOnline } = useAuth();
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('all');
   const [showAddModal, setShowAddModal] = useState(false);
   const [tick, setTick] = useState(0);
   const [notification, setNotification] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
   const [expandedUser, setExpandedUser] = useState<string | null>(null);
+  const [users, setUsers] = useState<AuthUser[]>([]);
 
-  const users: AuthUser[] = useMemo(() => authService.getAllUsers(), [tick]);
+  useEffect(() => {
+    if (backendOnline) {
+      apiUserService.getAllUsers()
+        .then(setUsers)
+        .catch(() => setUsers(authService.getAllUsers()));
+    } else {
+      setUsers(authService.getAllUsers());
+    }
+  }, [backendOnline, tick]);
 
   const filtered = useMemo(() => users.filter(u => {
     if (roleFilter !== 'all' && u.role !== roleFilter) return false;
@@ -107,11 +117,20 @@ export function AdminUsersPage() {
     setTimeout(() => setNotification(null), 3000);
   };
 
-  const handleRoleChange = (userId: string, newRole: UserRole) => {
+  const handleRoleChange = async (userId: string, newRole: UserRole) => {
     if (userId === currentUser?.id) { notify('Нельзя изменить роль самому себе', 'error'); return; }
-    authService.updateProfile(userId, { role: newRole } as never);
-    setTick(n => n + 1);
-    notify('Роль обновлена', 'success');
+
+    try {
+      if (backendOnline) {
+        await apiUserService.updateUserRole(userId, newRole);
+      } else {
+        authService.updateProfile(userId, { role: newRole } as never);
+      }
+      setTick(n => n + 1);
+      notify('Роль обновлена', 'success');
+    } catch (err) {
+      notify((err as Error).message || 'Ошибка при изменении роли', 'error');
+    }
   };
 
   const roleCount = useMemo(() => {
