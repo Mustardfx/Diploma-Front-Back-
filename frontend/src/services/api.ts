@@ -3,7 +3,7 @@ import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios';
 const TOKEN_KEY = 'sport_app_token';
 
 export const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL ?? '/api',
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8080',
   timeout: 10_000,
   headers: {
     'Content-Type': 'application/json',
