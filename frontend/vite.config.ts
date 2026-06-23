@@ -12,10 +12,10 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react()],
     server: {
-      host: '0.0.0.0',   // ← add this
-      port: 5173,         // ← add this
+      host: '0.0.0.0',
+      port: 5173,         
       watch: {
-        usePolling: true, // ← add this for Docker
+        usePolling: true, 
       },
       proxy: {
         '/api': {
