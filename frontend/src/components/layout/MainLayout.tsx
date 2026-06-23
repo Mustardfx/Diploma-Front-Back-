@@ -16,6 +16,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Соревнования', path: '/competitions', icon: '⚡' },
   { label: 'Мои секции', path: '/coach/sections', icon: '◉', roles: ['coach', 'admin'] },
   { label: 'Посещаемость', path: '/coach/attendance', icon: '✓', roles: ['coach', 'admin'] },
+  { label: 'Статистика', path: '/coach/attendance-stats', icon: '∑', roles: ['coach', 'admin'] },
   { label: 'Судейство', path: '/judge/panel', icon: '⊖', roles: ['judge', 'admin'] },
   { label: 'Пользователи', path: '/admin/users', icon: '◎', roles: ['admin'] },
   { label: 'Управление', path: '/admin', icon: '◆', roles: ['admin'] },

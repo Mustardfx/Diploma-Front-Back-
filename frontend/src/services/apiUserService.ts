@@ -32,6 +32,12 @@ export const apiUserService = {
     return data;
   },
 
+  // Смена роли — отдельный admin-only маршрут (в общий update роль не входит намеренно)
+  async updateRole(id: string, role: UserRole): Promise<AuthUser> {
+    const { data } = await api.patch<AuthUser>(`/users/${id}/role`, { role });
+    return data;
+  },
+
   async delete(id: string): Promise<void> {
     await api.delete(`/users/${id}`);
   },

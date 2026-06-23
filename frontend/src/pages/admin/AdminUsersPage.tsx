@@ -130,7 +130,7 @@ export function AdminUsersPage() {
   const handleRoleChange = async (userId: string, newRole: UserRole) => {
     if (userId === currentUser?.id) { notify('Нельзя изменить роль самому себе', 'error'); return; }
     try {
-      await apiUserService.update(userId, { role: newRole });
+      await apiUserService.updateRole(userId, newRole);
       setTick(n => n + 1);
       notify('Роль обновлена', 'success');
     } catch (error) {

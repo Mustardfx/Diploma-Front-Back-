@@ -1,5 +1,5 @@
 import api from './api';
-import type { Section, Enrollment, AttendanceRecord } from '../types';
+import type { Section, Enrollment, AttendanceRecord, AttendanceOverview } from '../types';
 
 // ─── Sections ────────────────────────────────────────────────────────────────
 
@@ -84,5 +84,13 @@ export const apiAttendanceService = {
   async mark(records: Omit<AttendanceRecord, 'id'>[]): Promise<void> {
     // Бэк ждёт MarkAttendanceDto: { records: [...] }
     await api.post('/attendance/mark', { records });
+  },
+
+  // Общая статистика за период (+ разбивка по месяцам). sectionId опционален.
+  async getOverview(params: { from: string; to: string; sectionId?: string }): Promise<AttendanceOverview> {
+    const q = new URLSearchParams({ from: params.from, to: params.to });
+    if (params.sectionId) q.set('sectionId', params.sectionId);
+    const { data } = await api.get<AttendanceOverview>(`/attendance/overview?${q.toString()}`);
+    return data;
   },
 };

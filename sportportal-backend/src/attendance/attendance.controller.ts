@@ -4,6 +4,7 @@ import { MarkAttendanceDto } from './dto/attendance.dto';
 import { Jwt } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { UserRole } from '../common/enums/user-role.enum';
 
 @Controller('attendance')
@@ -19,6 +20,26 @@ export class AttendanceController {
     @Query('date') date?: string,
   ) {
     return this.attendanceService.findBySection(sectionId, date);
+  }
+
+  // Общая статистика за период: админ — по всем (опц. sectionId), тренер — по своим секциям
+  @Get('overview')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.COACH, UserRole.ADMIN)
+  overview(
+    @Query('from') from: string,
+    @Query('to') to: string,
+    @Query('sectionId') sectionId: string,
+    @CurrentUser('id') userId: string,
+    @CurrentUser('role') role: UserRole,
+  ) {
+    const coachId = role === UserRole.ADMIN ? undefined : userId;
+    return this.attendanceService.overview({
+      from,
+      to,
+      sectionId: sectionId || undefined,
+      coachId,
+    });
   }
 
   @Get('stats/:userId/:sectionId')

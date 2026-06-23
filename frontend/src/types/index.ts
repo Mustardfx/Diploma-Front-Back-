@@ -71,6 +71,23 @@ export interface AttendanceRecord {
   checkedInAt?: string | null; // timestamp отметки присутствия
 }
 
+export interface AttendanceMonthPoint {
+  month: string; // "2026-01"
+  total: number;
+  present: number;
+  percent: number;
+}
+
+export interface AttendanceOverview {
+  from: string;
+  to: string;
+  total: number;
+  present: number;
+  absent: number;
+  percent: number;
+  byMonth: AttendanceMonthPoint[];
+}
+
 // ==================== СОРЕВНОВАНИЯ ====================
 export interface Competition {
   id: string;

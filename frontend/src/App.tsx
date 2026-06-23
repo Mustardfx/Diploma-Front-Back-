@@ -1,6 +1,8 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { useTheme } from './context/ThemeContext';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
+import { CosmicBackground } from './components/CosmicBackground';
 
 // Public pages
 import { LoginPage } from './pages/public/LoginPage';
@@ -27,6 +29,7 @@ import { AdminCompetitionsPage } from './pages/admin/AdminCompetitionsPage';
 // Coach pages
 import { CoachSectionsPage } from './pages/coach/CoachSectionsPage';
 import { AttendancePage } from './pages/coach/AttendancePage';
+import { AttendanceStatsPage } from './pages/coach/AttendanceStatsPage';
 
 // Judge pages
 import { JudgePanelPage } from './pages/judge/JudgePanelPage';
@@ -92,6 +95,11 @@ function AppRoutes() {
               <AttendancePage />
             </ProtectedRoute>
           } />
+          <Route path="/coach/attendance-stats" element={
+            <ProtectedRoute roles={['coach', 'admin']}>
+              <AttendanceStatsPage />
+            </ProtectedRoute>
+          } />
 
           {/* Маршруты судьи */}
           <Route path="/judge/panel" element={
@@ -128,9 +136,15 @@ function AppRoutes() {
   );
 }
 
+function ThemeBackground() {
+  const { theme } = useTheme();
+  return theme === 'cosmic' ? <CosmicBackground /> : null;
+}
+
 export default function App() {
   return (
     <BrowserRouter>
+      <ThemeBackground />
       <AuthProvider>
         <AppRoutes />
       </AuthProvider>

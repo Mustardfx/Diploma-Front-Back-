@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { MainLayout } from '../components/layout/MainLayout';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 import { apiEnrollmentService, apiAttendanceService } from '../services/apiSectionService';
 import type { Section } from '../types';
 
@@ -14,8 +15,15 @@ const ROLE_LABELS: Record<string, string> = {
   judge: 'Судья',
 };
 
+const THEMES: { value: 'dark' | 'light' | 'cosmic'; label: string; swatch: React.CSSProperties }[] = [
+  { value: 'dark',   label: 'Тёмная',  swatch: { background: '#020617', borderColor: '#334155' } },
+  { value: 'light',  label: 'Светлая', swatch: { background: '#f1f5f9', borderColor: '#cbd5e1' } },
+  { value: 'cosmic', label: 'Космос',  swatch: { background: 'radial-gradient(ellipse at 30% 20%, #6366f1, transparent 60%), radial-gradient(ellipse at 80% 70%, #a855f7, transparent 55%), #05010f', borderColor: 'rgba(139,92,246,0.5)' } },
+];
+
 export function ProfilePage() {
   const { user, updateProfile, hasRole } = useAuth();
+  const { theme, setTheme } = useTheme();
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({
     firstName: user?.firstName ?? '',
@@ -119,6 +127,30 @@ export function ProfilePage() {
                 {ROLE_LABELS[user.role]}
               </div>
               <div className="mt-3 text-slate-500 text-xs">{user.email}</div>
+            </div>
+
+            {/* Тема оформления */}
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+              <h3 className="text-white font-bold mb-4 text-sm">Тема оформления</h3>
+              <div className="grid grid-cols-3 gap-2">
+                {THEMES.map(t => (
+                  <button
+                    key={t.value}
+                    onClick={() => setTheme(t.value)}
+                    className={`rounded-xl border p-2 transition-all text-left ${
+                      theme === t.value
+                        ? 'border-emerald-500 ring-2 ring-emerald-500/40'
+                        : 'border-slate-700 hover:border-slate-500'
+                    }`}
+                  >
+                    <div className="w-full h-10 rounded-lg border mb-2" style={t.swatch} />
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="text-xs text-white truncate">{t.label}</span>
+                      {theme === t.value && <span className="text-emerald-400 text-xs flex-shrink-0">✓</span>}
+                    </div>
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* Stats (athlete only) */}
