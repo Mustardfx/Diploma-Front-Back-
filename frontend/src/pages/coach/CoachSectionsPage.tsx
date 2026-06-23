@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { MainLayout } from '../../components/layout/MainLayout';
 import { useAuth } from '../../context/AuthContext';
-import { sectionService, enrollmentService } from '../../services/sectionService';
+import { apiSectionService } from '../../services/apiSectionService';
 import type { Section, ScheduleItem } from '../../types';
 
 const DAY_NAMES = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
@@ -20,15 +20,17 @@ const EMPTY_FORM = {
   schedule: [] as ScheduleItem[],
 };
 
-function SectionForm({ initial, coachId, onSave, onCancel }: {
-  initial?: Partial<typeof EMPTY_FORM>;
-  coachId: string;
-  onSave: (data: Omit<Section, 'id' | 'createdAt'>) => void;
+type SectionFormData = typeof EMPTY_FORM;
+
+function SectionForm({ initial, saving, onSave, onCancel }: {
+  initial?: Partial<SectionFormData>;
+  saving: boolean;
+  onSave: (data: SectionFormData) => void;
   onCancel: () => void;
 }) {
   const [form, setForm] = useState({ ...EMPTY_FORM, ...initial });
 
-  const set = (field: keyof typeof EMPTY_FORM) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+  const set = (field: keyof SectionFormData) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const val = e.target.type === 'checkbox' ? (e.target as HTMLInputElement).checked :
       (e.target.type === 'number' ? Number(e.target.value) : e.target.value);
     setForm(p => ({ ...p, [field]: val }));
@@ -48,7 +50,7 @@ function SectionForm({ initial, coachId, onSave, onCancel }: {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSave({ ...form, coachId, imageUrl: undefined });
+    onSave(form);
   };
 
   return (
@@ -123,7 +125,7 @@ function SectionForm({ initial, coachId, onSave, onCancel }: {
 
       <div className="flex gap-3 pt-2">
         <button type="button" onClick={onCancel} className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl transition-colors text-sm">Отмена</button>
-        <button type="submit" className="flex-1 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-xl transition-colors text-sm">Сохранить</button>
+        <button type="submit" disabled={saving} className="flex-1 py-2.5 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 font-bold rounded-xl transition-colors text-sm">{saving ? 'Сохранение…' : 'Сохранить'}</button>
       </div>
     </form>
   );
@@ -131,46 +133,72 @@ function SectionForm({ initial, coachId, onSave, onCancel }: {
 
 export function CoachSectionsPage() {
   const { user } = useAuth();
-  const [tick, setTick] = useState(0);
   const [modal, setModal] = useState<'create' | 'edit' | null>(null);
   const [editing, setEditing] = useState<Section | null>(null);
   const [notification, setNotification] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+  const [sections, setSections] = useState<Section[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      // Админ управляет всеми секциями, тренер — только своими.
+      setSections(await (user?.role === 'admin' ? apiSectionService.getAll() : apiSectionService.getMine()));
+    } catch (e) {
+      setNotification({ msg: (e as Error).message, type: 'error' });
+    } finally {
+      setLoading(false);
+    }
+  }, [user?.role]);
+
+  useEffect(() => { void load(); }, [load]);
 
   if (!user) return null;
-
-  const sections = sectionService.getByCoach(user.id);
 
   const notify = (msg: string, type: 'success' | 'error') => {
     setNotification({ msg, type });
     setTimeout(() => setNotification(null), 3000);
   };
 
-  const handleCreate = (data: Omit<Section, 'id' | 'createdAt'>) => {
-    sectionService.create(data);
-    setModal(null);
-    setTick(n => n + 1);
-    notify('Секция создана!', 'success');
+  const handleCreate = async (data: SectionFormData) => {
+    setSaving(true);
+    try {
+      await apiSectionService.create(data);
+      setModal(null);
+      await load();
+      notify('Секция создана!', 'success');
+    } catch (e) { notify((e as Error).message, 'error'); }
+    finally { setSaving(false); }
   };
 
-  const handleEdit = (data: Omit<Section, 'id' | 'createdAt'>) => {
+  const handleEdit = async (data: SectionFormData) => {
     if (!editing) return;
-    sectionService.update(editing.id, data);
-    setModal(null);
-    setEditing(null);
-    setTick(n => n + 1);
-    notify('Секция обновлена!', 'success');
+    setSaving(true);
+    try {
+      await apiSectionService.update(editing.id, data);
+      setModal(null);
+      setEditing(null);
+      await load();
+      notify('Секция обновлена!', 'success');
+    } catch (e) { notify((e as Error).message, 'error'); }
+    finally { setSaving(false); }
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (!confirm('Удалить секцию? Это действие нельзя отменить.')) return;
-    sectionService.delete(id);
-    setTick(n => n + 1);
-    notify('Секция удалена', 'success');
+    try {
+      await apiSectionService.delete(id);
+      await load();
+      notify('Секция удалена', 'success');
+    } catch (e) { notify((e as Error).message, 'error'); }
   };
 
-  const handleToggleActive = (section: Section) => {
-    sectionService.update(section.id, { isActive: !section.isActive });
-    setTick(n => n + 1);
+  const handleToggleActive = async (section: Section) => {
+    try {
+      await apiSectionService.update(section.id, { isActive: !section.isActive });
+      await load();
+    } catch (e) { notify((e as Error).message, 'error'); }
   };
 
   return (
@@ -193,7 +221,9 @@ export function CoachSectionsPage() {
           </div>
         )}
 
-        {sections.length === 0 ? (
+        {loading ? (
+          <div className="text-center py-20 text-slate-500">Загрузка…</div>
+        ) : sections.length === 0 ? (
           <div className="text-center py-20 bg-slate-900 border border-slate-800 rounded-2xl">
             <div className="text-5xl mb-4">◈</div>
             <p className="text-slate-400 mb-4">У вас пока нет секций</p>
@@ -204,7 +234,7 @@ export function CoachSectionsPage() {
         ) : (
           <div className="space-y-3">
             {sections.map(section => {
-              const count = sectionService.getEnrolledCount(section.id);
+              const count = section.enrolledCount ?? 0;
               return (
                 <div key={section.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-5 flex items-center gap-4">
                   <div className="flex-1 min-w-0">
@@ -257,7 +287,7 @@ export function CoachSectionsPage() {
                     price: editing.price ?? 0, ageMin: editing.ageMin ?? 0, ageMax: editing.ageMax ?? 0,
                     isActive: editing.isActive, schedule: editing.schedule,
                   } : undefined}
-                  coachId={user.id}
+                  saving={saving}
                   onSave={modal === 'create' ? handleCreate : handleEdit}
                   onCancel={() => { setModal(null); setEditing(null); }}
                 />

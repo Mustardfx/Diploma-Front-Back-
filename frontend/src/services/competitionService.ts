@@ -1,4 +1,4 @@
-import type { Competition, CompetitionRegistration, CompetitionResult, CompetitionCategory } from '../types';
+import type { Competition, CompetitionRegistration, CompetitionResult } from '../types';
 
 const COMPETITIONS_KEY = 'sport_competitions';
 const REGISTRATIONS_KEY = 'sport_comp_registrations';

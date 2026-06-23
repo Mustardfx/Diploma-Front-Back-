@@ -1,10 +1,11 @@
 import {
-  Controller, Get, Patch, Delete, Param, Body,
+  Controller, Get, Post, Patch, Delete, Param, Body,
   UseGuards, HttpCode, HttpStatus,
   BadRequestException, Request,
 } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { UpdateUserDto, UpdateRoleDto } from './dto/update-user.dto';
+import { CreateUserDto } from './dto/create-user.dto';
 import { Jwt } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -25,9 +26,17 @@ export class UsersController {
     return this.usersService.findAll();
   }
 
+  @Post()
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  async create(@Body() dto: CreateUserDto): Promise<UserDto> {
+    const user = await this.usersService.adminCreate(dto);
+    return new UserDto(user);
+  }
+
   @Get('/me')
   async getMe(@Request() req) {
-    const user = await this.usersService.getUserById(req.user.sub);
+    const user = await this.usersService.getUserById(req.user.id);
     if (!user) {
       throw new BadRequestException('User not found');
     }

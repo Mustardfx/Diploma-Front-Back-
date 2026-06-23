@@ -2,13 +2,6 @@ import { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 
-const TEST_ACCOUNTS = [
-  { email: 'admin@sport.ru', password: 'admin123', role: 'Администратор' },
-  { email: 'coach@sport.ru', password: 'coach123', role: 'Тренер' },
-  { email: 'athlete@sport.ru', password:  'athlete123', role: 'Спортсмен' },
-  { email: 'judge@sport.ru', password: 'judge123', role: 'Судья' },
-];
-
 export function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
@@ -32,12 +25,6 @@ export function LoginPage() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const fillAccount = (acc: typeof TEST_ACCOUNTS[0]) => {
-    setEmail(acc.email);
-    setPassword(acc.password);
-    setError('');
   };
 
   return (
@@ -116,29 +103,18 @@ export function LoginPage() {
             </button>
           </form>
 
+          <p className="text-right text-sm mt-3">
+            <Link to="/forgot-password" className="text-slate-400 hover:text-emerald-300">
+              Забыли пароль?
+            </Link>
+          </p>
+
           <p className="text-center text-slate-400 text-sm mt-6">
             Нет аккаунта?{' '}
             <Link to="/register" className="text-emerald-400 hover:text-emerald-300">
               Зарегистрироваться
             </Link>
           </p>
-
-          {/* Test accounts */}
-          <div className="mt-8 border-t border-slate-800 pt-6">
-            <p className="text-slate-500 text-xs mb-3">Тестовые аккаунты:</p>
-            <div className="grid grid-cols-2 gap-2">
-              {TEST_ACCOUNTS.map(acc => (
-                <button
-                  key={acc.email}
-                  onClick={() => fillAccount(acc)}
-                  className="px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-left transition-colors"
-                >
-                  <div className="text-white text-xs font-medium">{acc.role}</div>
-                  <div className="text-slate-500 text-xs truncate">{acc.email}</div>
-                </button>
-              ))}
-            </div>
-          </div>
         </div>
       </div>
     </div>

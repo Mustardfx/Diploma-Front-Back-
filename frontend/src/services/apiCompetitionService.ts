@@ -3,6 +3,7 @@ import type {
   Competition,
   CompetitionRegistration,
   CompetitionResult,
+  LeaderboardRow,
 } from '../types';
 
 // ─── Competitions ─────────────────────────────────────────────────────────────
@@ -104,5 +105,35 @@ export const apiCompResultService = {
 
   async delete(id: string): Promise<void> {
     await api.delete(`/results/${id}`);
+  },
+};
+
+// ─── Баллы за уроки + рейтинг ─────────────────────────────────────────────────
+
+export const apiLessonPointsService = {
+  // Накопленный рейтинг по баллам за уроки (опц. в рамках секции)
+  async getLeaderboard(sectionId?: string): Promise<LeaderboardRow[]> {
+    const url = sectionId
+      ? `/results/leaderboard/section/${sectionId}`
+      : '/results/leaderboard';
+    const { data } = await api.get<LeaderboardRow[]>(url);
+    return data;
+  },
+
+  // Баллы за уроки конкретной секции (для UI тренера)
+  async getBySection(sectionId: string): Promise<CompetitionResult[]> {
+    const { data } = await api.get<CompetitionResult[]>(`/results/lesson/section/${sectionId}`);
+    return data;
+  },
+
+  async save(payload: {
+    sectionId: string;
+    userId: string;
+    lessonDate: string;
+    score: number;
+    notes?: string;
+  }): Promise<CompetitionResult> {
+    const { data } = await api.post<CompetitionResult>('/results/lesson', payload);
+    return data;
   },
 };

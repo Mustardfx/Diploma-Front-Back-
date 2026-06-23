@@ -42,9 +42,14 @@ export class AttendanceService {
       if (existing) {
         existing.present = rec.present;
         existing.note = rec.note ?? null;
+        // Фиксируем момент отметки присутствия; при отсутствии — обнуляем.
+        existing.checkedInAt = rec.present ? new Date() : null;
         saved.push(await this.repo.save(existing));
       } else {
-        const record = this.repo.create(rec);
+        const record = this.repo.create({
+          ...rec,
+          checkedInAt: rec.present ? new Date() : null,
+        });
         saved.push(await this.repo.save(record));
       }
     }

@@ -1,7 +1,11 @@
 import { useEffect, useState } from 'react';
 import { MainLayout } from '../components/layout/MainLayout';
 import { useAuth } from '../context/AuthContext';
-import { enrollmentService, sectionService, attendanceService } from '../services/sectionService';
+import { apiEnrollmentService, apiAttendanceService } from '../services/apiSectionService';
+import type { Section } from '../types';
+
+type Stats = { total: number; present: number; percent: number };
+type MySection = { id: string; section: Section; stats: Stats | null };
 
 const ROLE_LABELS: Record<string, string> = {
   admin: 'Администратор',
@@ -24,26 +28,41 @@ export function ProfilePage() {
     birthDate: user?.birthDate ?? '',
   });
   const [notification, setNotification] = useState('');
+  const [mySections, setMySections] = useState<MySection[]>([]);
+
+  // My enrollments + attendance stats (from backend)
+  useEffect(() => {
+    if (!user || user.role !== 'athlete') { setMySections([]); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const enrollments = (await apiEnrollmentService.getMine()).filter(e => e.status === 'active' && e.section);
+        const rows = await Promise.all(enrollments.map(async (e) => {
+          let stats: Stats | null = null;
+          try { stats = await apiAttendanceService.getUserStats(user.id, e.sectionId); } catch { stats = null; }
+          return { id: e.id, section: e.section as Section, stats };
+        }));
+        if (!cancelled) setMySections(rows);
+      } catch { if (!cancelled) setMySections([]); }
+    })();
+    return () => { cancelled = true; };
+  }, [user]);
 
   if (!user) return null;
 
   const set = (field: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setForm(p => ({ ...p, [field]: e.target.value }));
 
-  const handleSave = () => {
-    updateProfile(form);
-    setEditing(false);
-    setNotification('Профиль обновлён!');
+  const handleSave = async () => {
+    try {
+      await updateProfile(form);
+      setEditing(false);
+      setNotification('Профиль обновлён!');
+    } catch (e) {
+      setNotification((e as Error).message || 'Не удалось сохранить профиль');
+    }
     setTimeout(() => setNotification(''), 3000);
   };
-
-  // My enrollments + stats
-  const enrollments = hasRole('athlete') ? enrollmentService.getUserEnrollments(user.id).filter(e => e.status === 'active') : [];
-  const mySections = enrollments.map(e => {
-    const section = sectionService.getById(e.sectionId);
-    const stats = section ? attendanceService.getUserStats(user.id, section.id) : null;
-    return { enrollment: e, section, stats };
-  }).filter(x => x.section);
 
   const avgAttendance = mySections.length > 0
     ? Math.round(mySections.reduce((sum, x) => sum + (x.stats?.percent ?? 0), 0) / mySections.length)

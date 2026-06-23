@@ -1,10 +1,9 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { MainLayout } from '../../components/layout/MainLayout';
 import { useAuth } from '../../context/AuthContext';
-import { sectionService, enrollmentService } from '../../services/sectionService';
-import { authService } from '../../services/authService';
-import type { Section } from '../../types';
+import { apiSectionService, apiEnrollmentService } from '../../services/apiSectionService';
+import type { Section, Enrollment } from '../../types';
 
 const SPORTS = ['Все', 'Борьба', 'Бокс', 'Плавание', 'Лёгкая атлетика'];
 const DAY_NAMES = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
@@ -16,16 +15,17 @@ const SPORT_COLORS: Record<string, string> = {
   'Лёгкая атлетика': 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20',
 };
 
-function SectionCard({ section, enrolled, onEnroll, onCancel, canManage }: {
+function SectionCard({ section, enrolled, busy, onEnroll, onCancel, canManage }: {
   section: Section;
   enrolled: boolean;
+  busy: boolean;
   onEnroll: (id: string) => void;
   onCancel: (id: string) => void;
   canManage: boolean;
 }) {
-  const count = sectionService.getEnrolledCount(section.id);
+  const count = section.enrolledCount ?? 0;
   const full = count >= section.maxParticipants;
-  const coach = authService.getUserById(section.coachId);
+  const coach = section.coach;
   const sportColor = SPORT_COLORS[section.sport] ?? 'bg-slate-500/10 text-slate-400 border-slate-500/20';
 
   return (
@@ -40,7 +40,7 @@ function SectionCard({ section, enrolled, onEnroll, onCancel, canManage }: {
           <h3 className="text-white font-bold text-lg leading-tight">{section.name}</h3>
         </div>
         {section.price && (
-          <div className="text-emerald-400 font-bold text-sm whitespace-nowrap">{section.price.toLocaleString()} ₸/мес</div>
+          <div className="text-emerald-400 font-bold text-sm whitespace-nowrap">{Number(section.price).toLocaleString()} ₸/мес</div>
         )}
       </div>
 
@@ -49,7 +49,7 @@ function SectionCard({ section, enrolled, onEnroll, onCancel, canManage }: {
       <div className="space-y-1.5 text-sm">
         <div className="flex items-center gap-2 text-slate-400">
           <span className="text-slate-600 w-4 text-center">◎</span>
-          <span>{coach ? `${coach.lastName} ${coach.firstName[0]}.` : '—'}</span>
+          <span>{coach ? `${coach.lastName} ${coach.firstName?.[0] ?? ''}.` : '—'}</span>
         </div>
         <div className="flex items-center gap-2 text-slate-400">
           <span className="text-slate-600 w-4 text-center">⌖</span>
@@ -57,7 +57,7 @@ function SectionCard({ section, enrolled, onEnroll, onCancel, canManage }: {
         </div>
         <div className="flex items-center gap-2 text-slate-400">
           <span className="text-slate-600 w-4 text-center">◷</span>
-          <span>{section.schedule.map(s => `${DAY_NAMES[s.dayOfWeek]} ${s.timeStart}`).join(', ')}</span>
+          <span>{(section.schedule ?? []).map(s => `${DAY_NAMES[s.dayOfWeek]} ${s.timeStart}`).join(', ')}</span>
         </div>
         {(section.ageMin || section.ageMax) && (
           <div className="flex items-center gap-2 text-slate-400">
@@ -86,11 +86,11 @@ function SectionCard({ section, enrolled, onEnroll, onCancel, canManage }: {
         </Link>
         {!canManage && section.isActive && (
           enrolled ? (
-            <button onClick={() => onCancel(section.id)} className="flex-1 py-2 text-sm bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded-xl transition-colors">
+            <button onClick={() => onCancel(section.id)} disabled={busy} className="flex-1 py-2 text-sm bg-red-500/10 hover:bg-red-500/20 disabled:opacity-40 text-red-400 border border-red-500/20 rounded-xl transition-colors">
               Отменить
             </button>
           ) : (
-            <button onClick={() => onEnroll(section.id)} disabled={full} className="flex-1 py-2 text-sm bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 disabled:cursor-not-allowed text-slate-950 font-semibold rounded-xl transition-colors">
+            <button onClick={() => onEnroll(section.id)} disabled={full || busy} className="flex-1 py-2 text-sm bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 disabled:cursor-not-allowed text-slate-950 font-semibold rounded-xl transition-colors">
               {full ? 'Мест нет' : 'Записаться'}
             </button>
           )
@@ -111,10 +111,44 @@ export function SectionsPage() {
   const [sport, setSport] = useState('Все');
   const [onlyActive, setOnlyActive] = useState(true);
   const [notification, setNotification] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
-  const [tick, setTick] = useState(0);
 
-  const sections = useMemo(() => sectionService.getAll(), [tick]);
+  const [sections, setSections] = useState<Section[]>([]);
+  const [myEnrollments, setMyEnrollments] = useState<Enrollment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState<string | null>(null);
+
   const canManage = hasRole('coach', 'admin');
+  const isAthlete = hasRole('athlete');
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [secs, enrs] = await Promise.all([
+        apiSectionService.getAll(),
+        isAthlete ? apiEnrollmentService.getMine() : Promise.resolve([] as Enrollment[]),
+      ]);
+      setSections(secs);
+      setMyEnrollments(enrs);
+    } catch (e) {
+      setNotification({ msg: (e as Error).message, type: 'error' });
+    } finally {
+      setLoading(false);
+    }
+  }, [isAthlete]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const notify = (msg: string, type: 'success' | 'error') => {
+    setNotification({ msg, type });
+    setTimeout(() => setNotification(null), 3000);
+  };
+
+  // sectionId -> активная запись текущего пользователя
+  const enrollmentBySection = useMemo(() => {
+    const map = new Map<string, Enrollment>();
+    myEnrollments.forEach(e => { if (e.status === 'active') map.set(e.sectionId, e); });
+    return map;
+  }, [myEnrollments]);
 
   const filtered = useMemo(() => sections.filter(s => {
     if (onlyActive && !s.isActive) return false;
@@ -123,27 +157,28 @@ export function SectionsPage() {
     return true;
   }), [sections, sport, search, onlyActive]);
 
-  const notify = (msg: string, type: 'success' | 'error') => {
-    setNotification({ msg, type });
-    setTimeout(() => setNotification(null), 3000);
-  };
-
-  const handleEnroll = (sectionId: string) => {
+  const handleEnroll = async (sectionId: string) => {
     if (!user) return;
+    setBusyId(sectionId);
     try {
-      enrollmentService.enroll(user.id, sectionId);
-      setTick(n => n + 1);
+      await apiEnrollmentService.enroll(sectionId);
+      await load();
       notify('Вы успешно записаны на секцию!', 'success');
     } catch (e) { notify((e as Error).message, 'error'); }
+    finally { setBusyId(null); }
   };
 
-  const handleCancel = (sectionId: string) => {
+  const handleCancel = async (sectionId: string) => {
     if (!user) return;
+    const enr = enrollmentBySection.get(sectionId);
+    if (!enr) return notify('Запись не найдена', 'error');
+    setBusyId(sectionId);
     try {
-      enrollmentService.cancel(user.id, sectionId);
-      setTick(n => n + 1);
+      await apiEnrollmentService.cancel(enr.id);
+      await load();
       notify('Запись отменена', 'success');
     } catch (e) { notify((e as Error).message, 'error'); }
+    finally { setBusyId(null); }
   };
 
   return (
@@ -152,7 +187,7 @@ export function SectionsPage() {
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-3xl font-black text-white">Секции</h1>
-            <p className="text-slate-400 mt-1">Найдено: {filtered.length}</p>
+            <p className="text-slate-400 mt-1">{loading ? 'Загрузка…' : `Найдено: ${filtered.length}`}</p>
           </div>
           {canManage && (
             <Link to="/coach/sections" className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-xl transition-colors text-sm">
@@ -186,7 +221,9 @@ export function SectionsPage() {
           </button>
         </div>
 
-        {filtered.length === 0 ? (
+        {loading ? (
+          <div className="text-center py-20 text-slate-500">Загрузка секций…</div>
+        ) : filtered.length === 0 ? (
           <div className="text-center py-20 text-slate-500">
             <div className="text-5xl mb-4">◈</div>
             <p>Секции не найдены</p>
@@ -197,7 +234,8 @@ export function SectionsPage() {
               <SectionCard
                 key={section.id}
                 section={section}
-                enrolled={user ? enrollmentService.isEnrolled(user.id, section.id) : false}
+                enrolled={enrollmentBySection.has(section.id)}
+                busy={busyId === section.id}
                 onEnroll={handleEnroll}
                 onCancel={handleCancel}
                 canManage={canManage}

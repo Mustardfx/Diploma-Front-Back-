@@ -16,6 +16,7 @@ export interface User {
   birthDate?: string;
   city?: string;
   sport?: string;
+  mustChangePassword?: boolean;
   createdAt: string;
 }
 
@@ -37,6 +38,8 @@ export interface Section {
   imageUrl?: string;
   isActive: boolean;
   createdAt: string;
+  coach?: AuthUser;       // приходит с бэка (relation)
+  enrolledCount?: number; // приходит с бэка (кол-во активных записей)
 }
 
 export interface ScheduleItem {
@@ -52,6 +55,8 @@ export interface Enrollment {
   userId: string;
   status: 'active' | 'completed' | 'cancelled';
   enrolledAt: string;
+  user?: AuthUser;    // приходит с бэка (GET /enrollments/section/:id)
+  section?: Section;  // приходит с бэка (GET /enrollments/my)
 }
 
 // ==================== ПОСЕЩАЕМОСТЬ ====================
@@ -63,6 +68,7 @@ export interface AttendanceRecord {
   date: string; // "2025-03-10"
   present: boolean;
   note?: string;
+  checkedInAt?: string | null; // timestamp отметки присутствия
 }
 
 // ==================== СОРЕВНОВАНИЯ ====================
@@ -105,15 +111,28 @@ export interface CompetitionRegistration {
 // ==================== РЕЗУЛЬТАТЫ СОРЕВНОВАНИЯ ====================
 export interface CompetitionResult {
   id: string;
-  competitionId: string;
-  registrationId: string;
+  competitionId?: string;
+  registrationId?: string;
   userId: string;
-  categoryId: string;
+  categoryId?: string;
   place?: number;
   score?: number;
   notes?: string;
-  judgeId: string;
+  judgeId?: string;
+  // ── Баллы за уроки (type='lesson') ──
+  type?: 'competition' | 'lesson';
+  sectionId?: string;
+  lessonDate?: string;
+  awardedBy?: string;
   recordedAt: string;
+}
+
+// Строка таблицы рейтинга (накопленные баллы за уроки)
+export interface LeaderboardRow {
+  userId: string;
+  user?: AuthUser;
+  totalPoints: number;
+  lessonsCount: number;
 }
 
 // ==================== УВЕДОМЛЕНИЯ ====================

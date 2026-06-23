@@ -3,7 +3,7 @@ import {
   Param, Body, UseGuards, HttpCode, HttpStatus,
 } from '@nestjs/common';
 import { ResultsService } from './results.service';
-import { CreateResultDto } from './dto/result.dto';
+import { CreateResultDto, LessonPointsDto } from './dto/result.dto';
 import { Jwt } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -23,6 +23,32 @@ export class ResultsController {
   @Get('user/:userId')
   findByUser(@Param('userId') userId: string) {
     return this.resultsService.findByUser(userId);
+  }
+
+  // ─── Баллы за уроки ──────────────────────────────────────────────
+  @Get('leaderboard')
+  leaderboard() {
+    return this.resultsService.leaderboard();
+  }
+
+  @Get('leaderboard/section/:sectionId')
+  leaderboardBySection(@Param('sectionId') sectionId: string) {
+    return this.resultsService.leaderboard(sectionId);
+  }
+
+  @Get('lesson/section/:sectionId')
+  findLessonPoints(@Param('sectionId') sectionId: string) {
+    return this.resultsService.findLessonPoints(sectionId);
+  }
+
+  @Post('lesson')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.COACH, UserRole.ADMIN)
+  saveLessonPoints(
+    @Body() dto: LessonPointsDto,
+    @CurrentUser('id') coachId: string,
+  ) {
+    return this.resultsService.saveLessonPoints(dto, coachId);
   }
 
   @Post()

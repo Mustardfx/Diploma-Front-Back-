@@ -1,30 +1,79 @@
-import { useState, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { MainLayout } from '../../components/layout/MainLayout';
 import { useAuth } from '../../context/AuthContext';
-import { competitionService, compRegistrationService, compResultService } from '../../services/competitionService';
 import { authService } from '../../services/authService';
+import { apiCompetitionService, apiCompRegistrationService, apiCompResultService } from '../../services/apiCompetitionService';
+import { apiUserService } from '../../services/apiUserService';
+import { competitionService, compRegistrationService, compResultService } from '../../services/competitionService';
+import type { AuthUser, Competition, CompetitionRegistration, CompetitionResult } from '../../types';
 
 const PLACE_COLORS = ['', 'bg-yellow-500 text-slate-950', 'bg-slate-400 text-slate-950', 'bg-amber-700 text-white'];
+
+// Соревнования, доступные для судейства (всё, кроме отменённых)
+const isJudgeable = (c: Competition) => c.status !== 'cancelled';
 
 export function JudgePanelPage() {
   const { user } = useAuth();
   const [selectedComp, setSelectedComp] = useState('');
   const [selectedCat, setSelectedCat] = useState('');
+  const [users, setUsers] = useState<AuthUser[]>([]);
+  const [competitions, setCompetitions] = useState<Competition[]>([]);
+  const [allRegs, setAllRegs] = useState<CompetitionRegistration[]>([]);
+  const [allResults, setAllResults] = useState<CompetitionResult[]>([]);
   const [scores, setScores] = useState<Record<string, { place: string; score: string; notes: string }>>({});
   const [saved, setSaved] = useState(false);
   const [notification, setNotification] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      setLoading(true);
+      try {
+        const [comps, regs] = await Promise.all([
+          apiCompetitionService.getAll().catch(() => []),
+          apiCompRegistrationService.getAll().catch(() => []),
+        ]);
+        if (!cancelled) {
+          setCompetitions(comps.length > 0 ? comps.filter(isJudgeable) : competitionService.getAll().filter(isJudgeable));
+          setAllRegs(regs.length > 0 ? regs : compRegistrationService.getAll());
+          setUsers(await apiUserService.getAll().catch(() => authService.getAllUsers()));
+        }
+      } catch {
+        if (!cancelled) {
+          setCompetitions(competitionService.getAll().filter(isJudgeable));
+          setAllRegs(compRegistrationService.getAll());
+          setUsers(authService.getAllUsers());
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    load();
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    if (!selectedComp) { setAllResults([]); return; }
+    let cancelled = false;
+    async function loadResults() {
+      try {
+        const res = await apiCompResultService.getByCompetition(selectedComp).catch(() => compResultService.getCompetitionResults(selectedComp));
+        if (!cancelled) setAllResults(res);
+      } catch {
+        if (!cancelled) setAllResults(compResultService.getCompetitionResults(selectedComp));
+      }
+    }
+    loadResults();
+    return () => { cancelled = true; };
+  }, [selectedComp]);
 
   if (!user) return null;
 
-  const competitions = useMemo(() =>
-    competitionService.getAll().filter(c => c.status === 'ongoing' || c.status === 'completed'),
-    []
-  );
-
   const competition = competitions.find(c => c.id === selectedComp);
-  const registrations = selectedComp ? compRegistrationService.getCompetitionRegistrations(selectedComp).filter(r => r.status === 'approved') : [];
+  const registrations = selectedComp ? allRegs.filter(r => r.competitionId === selectedComp && r.status === 'approved') : [];
   const filteredRegs = selectedCat ? registrations.filter(r => r.categoryId === selectedCat) : registrations;
-  const existingResults = selectedComp ? compResultService.getCompetitionResults(selectedComp) : [];
+  const existingResults = selectedComp ? allResults.filter(r => r.competitionId === selectedComp) : [];
 
   const initScores = () => {
     const init: Record<string, { place: string; score: string; notes: string }> = {};
@@ -46,26 +95,31 @@ export function JudgePanelPage() {
     setScores(p => ({ ...initScores(), ...p, [regId]: { ...currentScores[regId], [field]: val } }));
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!competition || !user) return;
     try {
-      filteredRegs.forEach(reg => {
-        const s = currentScores[reg.id];
-        if (!s) return;
-        compResultService.saveResult({
-          competitionId: competition.id,
-          registrationId: reg.id,
-          userId: reg.userId,
-          categoryId: reg.categoryId,
-          place: s.place ? parseInt(s.place) : undefined,
-          score: s.score ? parseFloat(s.score) : undefined,
-          notes: s.notes || undefined,
-          judgeId: user.id,
-        });
-      });
+      await Promise.all(
+        filteredRegs.flatMap(reg => {
+          const s = currentScores[reg.id];
+          if (!s) return [];
+          return [apiCompResultService.save({
+            competitionId: competition.id,
+            registrationId: reg.id,
+            userId: reg.userId,
+            categoryId: reg.categoryId,
+            place: s.place ? parseInt(s.place) : undefined,
+            score: s.score ? parseFloat(s.score) : undefined,
+            notes: s.notes || undefined,
+            judgeId: user.id,
+          })];
+        }),
+      );
       setSaved(true);
       setNotification({ msg: 'Результаты сохранены!', type: 'success' });
       setTimeout(() => setNotification(null), 3000);
+      // Перечитываем сохранённые результаты из БД
+      const res = await apiCompResultService.getByCompetition(competition.id).catch(() => allResults);
+      setAllResults(res);
     } catch (e) {
       setNotification({ msg: (e as Error).message, type: 'error' });
     }
@@ -83,20 +137,29 @@ export function JudgePanelPage() {
       <div className="max-w-4xl">
         <div className="mb-6">
           <h1 className="text-3xl font-black text-white">Судейская панель</h1>
-          <p className="text-slate-400 mt-1">Ввод результатов соревнований</p>
+          <p className="mt-1 text-slate-400">Ввод результатов соревнований</p>
         </div>
 
-        {notification && (
+        {loading && (
+          <div className="text-center py-20 text-slate-500">
+            <div className="text-4xl mb-3">⏳</div>
+            <p>Загрузка данных…</p>
+          </div>
+        )}
+
+        {!loading && (
+          <div className="space-y-6">
+            {notification && (
           <div className={`mb-4 px-4 py-3 rounded-xl text-sm border ${notification.type === 'success' ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-red-500/10 border-red-500/30 text-red-400'}`}>
             {notification.msg}
           </div>
         )}
 
         {/* Controls */}
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 mb-6">
+        <div className="p-5 mb-6 border bg-slate-900 border-slate-800 rounded-2xl">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">Соревнование</label>
+              <label className="block mb-2 text-sm font-medium text-slate-300">Соревнование</label>
               <select value={selectedComp} onChange={e => handleCompChange(e.target.value)}
                 className="w-full px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-purple-500 text-sm">
                 <option value="">Выберите соревнование</option>
@@ -106,7 +169,7 @@ export function JudgePanelPage() {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">Категория</label>
+              <label className="block mb-2 text-sm font-medium text-slate-300">Категория</label>
               <select value={selectedCat} onChange={e => { setSelectedCat(e.target.value); setScores({}); }}
                 disabled={!selectedComp}
                 className="w-full px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-purple-500 text-sm disabled:opacity-40">
@@ -120,18 +183,18 @@ export function JudgePanelPage() {
         </div>
 
         {!selectedComp ? (
-          <div className="text-center py-20 bg-slate-900 border border-slate-800 rounded-2xl text-slate-500">
-            <div className="text-4xl mb-3">⊖</div>
+          <div className="py-20 text-center border bg-slate-900 border-slate-800 rounded-2xl text-slate-500">
+            <div className="mb-3 text-4xl">⊖</div>
             <p>Выберите соревнование для ввода результатов</p>
           </div>
         ) : filteredRegs.length === 0 ? (
-          <div className="text-center py-20 bg-slate-900 border border-slate-800 rounded-2xl text-slate-500">
+          <div className="py-20 text-center border bg-slate-900 border-slate-800 rounded-2xl text-slate-500">
             <p>Нет одобренных заявок{selectedCat ? ' в этой категории' : ''}</p>
           </div>
         ) : (
           <>
             <div className="flex items-center justify-between mb-4">
-              <p className="text-slate-400 text-sm">Участников: <span className="text-white font-medium">{filteredRegs.length}</span></p>
+              <p className="text-sm text-slate-400">Участников: <span className="font-medium text-white">{filteredRegs.length}</span></p>
               <button onClick={() => {
                 const auto: Record<string, { place: string; score: string; notes: string }> = {};
                 const sorted = [...filteredRegs].sort((a, b) => {
@@ -148,51 +211,51 @@ export function JudgePanelPage() {
               </button>
             </div>
 
-            <div className="space-y-3 mb-6">
+            <div className="mb-6 space-y-3">
               {filteredRegs.map(reg => {
-                const u = authService.getUserById(reg.userId);
+                const u = users.find(u => u.id === reg.userId);
                 const cat = competition?.categories.find(c => c.id === reg.categoryId);
                 const s = currentScores[reg.id] ?? { place: '', score: '', notes: '' };
                 const placeNum = parseInt(s.place);
                 const placeColor = PLACE_COLORS[placeNum] ?? 'bg-slate-700 text-slate-300';
 
                 return (
-                  <div key={reg.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+                  <div key={reg.id} className="p-4 border bg-slate-900 border-slate-800 rounded-2xl">
                     <div className="flex items-center gap-4 mb-3">
                       <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black text-sm flex-shrink-0 ${s.place ? placeColor : 'bg-slate-700 text-slate-400'}`}>
                         {s.place || '?'}
                       </div>
                       <div className="flex-1">
-                        <div className="text-white font-medium">{u ? `${u.lastName} ${u.firstName}` : '—'}</div>
-                        <div className="text-slate-500 text-xs">{cat?.name} · {u?.email}</div>
+                        <div className="font-medium text-white">{u ? `${u.lastName} ${u.firstName}` : '—'}</div>
+                        <div className="text-xs text-slate-500">{cat?.name} · {u?.email}</div>
                       </div>
                     </div>
                     <div className="grid grid-cols-3 gap-3">
                       <div>
-                        <label className="block text-xs text-slate-500 mb-1">Место</label>
+                        <label className="block mb-1 text-xs text-slate-500">Место</label>
                         <input
                           type="number" min={1} value={s.place}
                           onChange={e => handleChange(reg.id, 'place', e.target.value)}
                           placeholder="1"
-                          className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-purple-500"
+                          className="w-full px-3 py-2 text-sm text-white border bg-slate-800 border-slate-700 rounded-xl focus:outline-none focus:border-purple-500"
                         />
                       </div>
                       <div>
-                        <label className="block text-xs text-slate-500 mb-1">Очки / Результат</label>
+                        <label className="block mb-1 text-xs text-slate-500">Очки / Результат</label>
                         <input
                           type="number" step="0.1" value={s.score}
                           onChange={e => handleChange(reg.id, 'score', e.target.value)}
                           placeholder="0.0"
-                          className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-purple-500"
+                          className="w-full px-3 py-2 text-sm text-white border bg-slate-800 border-slate-700 rounded-xl focus:outline-none focus:border-purple-500"
                         />
                       </div>
                       <div>
-                        <label className="block text-xs text-slate-500 mb-1">Примечание</label>
+                        <label className="block mb-1 text-xs text-slate-500">Примечание</label>
                         <input
                           value={s.notes}
                           onChange={e => handleChange(reg.id, 'notes', e.target.value)}
                           placeholder="Дисквалификация..."
-                          className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-purple-500"
+                          className="w-full px-3 py-2 text-sm text-white border bg-slate-800 border-slate-700 rounded-xl focus:outline-none focus:border-purple-500"
                         />
                       </div>
                     </div>
@@ -201,10 +264,12 @@ export function JudgePanelPage() {
               })}
             </div>
 
-            <button onClick={handleSave} className="w-full py-3 bg-purple-500 hover:bg-purple-400 text-white font-bold rounded-xl transition-colors">
+            <button onClick={handleSave} className="w-full py-3 font-bold text-white transition-colors bg-purple-500 hover:bg-purple-400 rounded-xl">
               {saved ? '✓ Результаты сохранены' : 'Сохранить результаты'}
             </button>
           </>
+        )}
+          </div>
         )}
       </div>
     </MainLayout>

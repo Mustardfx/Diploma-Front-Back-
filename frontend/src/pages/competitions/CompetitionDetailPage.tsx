@@ -1,9 +1,13 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { MainLayout } from '../../components/layout/MainLayout';
 import { useAuth } from '../../context/AuthContext';
-import { competitionService, compRegistrationService, compResultService } from '../../services/competitionService';
-import { authService } from '../../services/authService';
+import { apiUserService } from '../../services/apiUserService';
+import { apiCompetitionService, apiCompRegistrationService, apiCompResultService } from '../../services/apiCompetitionService';
+import type { AuthUser, Competition, CompetitionRegistration, CompetitionResult } from '../../types';
+
+const formatDate = (dateStr: string) =>
+  new Date(dateStr).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
 
 const STATUS_CONFIG = {
   upcoming:  { label: 'Предстоит',   color: 'text-blue-400',    bg: 'bg-blue-500/10 border-blue-500/20' },
@@ -22,12 +26,45 @@ const REG_STATUS = {
 export function CompetitionDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { user, hasRole } = useAuth();
+  const [competition, setCompetition] = useState<Competition | null>(null);
+  const [allRegs, setAllRegs] = useState<CompetitionRegistration[]>([]);
+  const [results, setResults] = useState<CompetitionResult[]>([]);
+  const [users, setUsers] = useState<AuthUser[]>([]);
+  const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState('');
   const [notification, setNotification] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
   const [tick, setTick] = useState(0);
 
-  const competition = id ? competitionService.getById(id) : null;
-  if (!competition) {
+  useEffect(() => {
+    if (!id) { setCompetition(null); setLoading(false); return; }
+    const compId = id;
+    let cancelled = false;
+    async function load() {
+      setLoading(true);
+      try {
+        const [comp, regs, res, allUsers] = await Promise.all([
+          apiCompetitionService.getById(compId),
+          apiCompRegistrationService.getByCompetition(compId),
+          apiCompResultService.getByCompetition(compId),
+          apiUserService.getAll().catch(() => [] as AuthUser[]),
+        ]);
+        if (!cancelled) {
+          setCompetition(comp);
+          setAllRegs(regs);
+          setResults(res);
+          setUsers(allUsers);
+        }
+      } catch {
+        if (!cancelled) setCompetition(null);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    load();
+    return () => { cancelled = true; };
+  }, [id, tick]);
+
+  if (!competition && !loading) {
     return (
       <MainLayout>
         <div className="text-center py-20 text-slate-400">
@@ -39,12 +76,22 @@ export function CompetitionDetailPage() {
     );
   }
 
-  const cfg = STATUS_CONFIG[competition.status];
-  const count = competitionService.getRegisteredCount(competition.id);
-  const deadlinePassed = competitionService.isDeadlinePassed(competition);
-  const myReg = user ? compRegistrationService.isRegistered(user.id, competition.id) : null;
-  const allRegs = compRegistrationService.getCompetitionRegistrations(competition.id);
-  const results = compResultService.getCompetitionResults(competition.id);
+  if (!competition && loading) {
+    return (
+      <MainLayout>
+        <div className="text-center py-20 text-slate-500">
+          <div className="text-4xl mb-3">⏳</div>
+          <p>Загрузка…</p>
+        </div>
+      </MainLayout>
+    );
+  }
+
+  if (!competition) return null;
+
+  const count = allRegs.filter(r => r.status !== 'rejected' && r.status !== 'withdrawn').length;
+  const deadlinePassed = new Date(competition.registrationDeadline) < new Date();
+  const myReg = user ? allRegs.find(r => r.userId === user.id && r.status !== 'withdrawn') ?? null : null;
   const canManage = hasRole('admin', 'coach');
   const isJudge = hasRole('judge');
 
@@ -53,21 +100,30 @@ export function CompetitionDetailPage() {
     setTimeout(() => setNotification(null), 3000);
   };
 
-  const handleRegister = () => {
+  const handleRegister = async () => {
     if (!user || !selectedCategory) { notify('Выберите категорию', 'error'); return; }
     try {
-      compRegistrationService.register(user.id, competition.id, selectedCategory);
+      await apiCompRegistrationService.register(competition.id, selectedCategory);
+      setSelectedCategory('');
       setTick(n => n + 1);
       notify('Заявка подана! Ожидайте подтверждения.', 'success');
     } catch (e) { notify((e as Error).message, 'error'); }
   };
 
-  const handleWithdraw = () => {
-    if (!user) return;
+  const handleWithdraw = async () => {
+    if (!myReg) return;
     try {
-      compRegistrationService.withdraw(user.id, competition.id);
+      await apiCompRegistrationService.withdraw(myReg.id);
       setTick(n => n + 1);
       notify('Регистрация отменена', 'success');
+    } catch (e) { notify((e as Error).message, 'error'); }
+  };
+
+  const handleSetStatus = async (regId: string, status: CompetitionRegistration['status']) => {
+    try {
+      await apiCompRegistrationService.updateStatus(regId, status);
+      setTick(n => n + 1);
+      notify(status === 'approved' ? 'Заявка одобрена' : 'Заявка отклонена', 'success');
     } catch (e) { notify((e as Error).message, 'error'); }
   };
 
@@ -97,7 +153,7 @@ export function CompetitionDetailPage() {
               <div className="flex items-start gap-4 mb-4">
                 <div className="flex-1">
                   <div className="flex items-center gap-2 flex-wrap mb-2">
-                    <span className={`text-xs px-2.5 py-1 rounded-full border ${cfg.bg} ${cfg.color}`}>{cfg.label}</span>
+                    <span className={`text-xs px-2.5 py-1 rounded-full border ${STATUS_CONFIG[competition.status].bg} ${STATUS_CONFIG[competition.status].color}`}>{STATUS_CONFIG[competition.status].label}</span>
                     <span className="text-xs px-2.5 py-1 rounded-full bg-slate-800 text-slate-400">{competition.sport}</span>
                   </div>
                   <h1 className="text-2xl font-black text-white leading-tight">{competition.name}</h1>
@@ -111,9 +167,9 @@ export function CompetitionDetailPage() {
               <h2 className="text-white font-bold mb-4">Информация</h2>
               <div className="space-y-3">
                 {[
-                  { icon: '◷', label: 'Дата проведения', value: `${competitionService.formatDate(competition.startDate)}${competition.startDate !== competition.endDate ? ` — ${competitionService.formatDate(competition.endDate)}` : ''}` },
+                  { icon: '◷', label: 'Дата проведения', value: `${formatDate(competition.startDate)}${competition.startDate !== competition.endDate ? ` — ${formatDate(competition.endDate)}` : ''}` },
                   { icon: '⌖', label: 'Место проведения', value: competition.location },
-                  { icon: '⏱', label: 'Приём заявок до', value: competitionService.formatDate(competition.registrationDeadline) },
+                  { icon: '⏱', label: 'Приём заявок до', value: formatDate(competition.registrationDeadline) },
                   { icon: '◎', label: 'Участников', value: `${count} / ${competition.maxParticipants}` },
                 ].map(item => (
                   <div key={item.label} className="flex gap-4 py-2.5 border-b border-slate-800 last:border-0">
@@ -154,7 +210,7 @@ export function CompetitionDetailPage() {
                   {results
                     .sort((a, b) => (a.place ?? 99) - (b.place ?? 99))
                     .map(result => {
-                      const u = authService.getUserById(result.userId);
+                      const u = users.find(u => u.id === result.userId);
                       const cat = competition.categories.find(c => c.id === result.categoryId);
                       return (
                         <div key={result.id} className="flex items-center gap-4 py-2.5 px-4 bg-slate-800 rounded-xl">
@@ -185,7 +241,7 @@ export function CompetitionDetailPage() {
                 <h2 className="text-white font-bold mb-4">Заявки ({allRegs.length})</h2>
                 <div className="space-y-2">
                   {allRegs.map(reg => {
-                    const u = authService.getUserById(reg.userId);
+                    const u = users.find(u => u.id === reg.userId);
                     const cat = competition.categories.find(c => c.id === reg.categoryId);
                     const regCfg = REG_STATUS[reg.status];
                     return (
@@ -201,11 +257,11 @@ export function CompetitionDetailPage() {
                           <span className={`text-xs px-2 py-0.5 rounded-full border ${regCfg.color}`}>{regCfg.label}</span>
                           {canManage && reg.status === 'pending' && (
                             <>
-                              <button onClick={() => { compRegistrationService.updateStatus(reg.id, 'approved'); setTick(n => n + 1); }}
+                              <button onClick={() => handleSetStatus(reg.id, 'approved')}
                                 className="text-xs px-2 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-lg hover:bg-emerald-500/20 transition-colors">
                                 ✓
                               </button>
-                              <button onClick={() => { compRegistrationService.updateStatus(reg.id, 'rejected'); setTick(n => n + 1); }}
+                              <button onClick={() => handleSetStatus(reg.id, 'rejected')}
                                 className="text-xs px-2 py-1 bg-red-500/10 text-red-400 border border-red-500/20 rounded-lg hover:bg-red-500/20 transition-colors">
                                 ✕
                               </button>
@@ -279,7 +335,7 @@ export function CompetitionDetailPage() {
               <div className={`rounded-2xl p-5 border ${deadlinePassed ? 'bg-red-500/5 border-red-500/20' : 'bg-slate-900 border-slate-800'}`}>
                 <h3 className="text-white font-bold mb-1 text-sm">Регистрация до</h3>
                 <p className={`font-bold ${deadlinePassed ? 'text-red-400' : 'text-amber-400'}`}>
-                  {competitionService.formatDate(competition.registrationDeadline)}
+                  {formatDate(competition.registrationDeadline)}
                 </p>
                 {deadlinePassed && <p className="text-red-400 text-xs mt-1">Приём заявок завершён</p>}
               </div>

@@ -47,6 +47,18 @@ export class User {
   @Column({ nullable: true })
   avatar: string;
 
+  // ─── Сброс пароля ───────────────────────────────────────────────
+  @Column({ name: 'reset_token_hash', type: 'varchar', nullable: true })
+  @Exclude()
+  resetTokenHash: string | null;
+
+  @Column({ name: 'reset_token_expires', type: 'timestamptz', nullable: true })
+  @Exclude()
+  resetTokenExpires: Date | null;
+
+  @Column({ name: 'must_change_password', type: 'boolean', default: false })
+  mustChangePassword: boolean;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 }

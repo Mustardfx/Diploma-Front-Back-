@@ -15,6 +15,11 @@ export class EnrollmentsService {
     private readonly sectionsService: SectionsService,
   ) {}
 
+  // Все записи (для админ-статистики; без relations — фронт фильтрует по статусу)
+  findAll(): Promise<Enrollment[]> {
+    return this.repo.find({ order: { enrolledAt: 'DESC' } });
+  }
+
   findByUser(userId: string): Promise<Enrollment[]> {
     return this.repo.find({
       where: { userId, status: EnrollmentStatus.ACTIVE },

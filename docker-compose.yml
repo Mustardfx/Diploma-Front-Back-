@@ -27,12 +27,20 @@ services:
       - ./sportportal-backend:/src
       - /src/node_modules
     environment:
+      - PORT=8080
       - DB_USERNAME=${DB_USERNAME}
       - DB_PASSWORD=${DB_PASSWORD}
       - DB_NAME=${DB_NAME}
       - DB_PORT=${DB_PORT}
       - DB_HOST=sportportal-db
       - JWT_SECRET=${JWT_SECRET}
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT}
+      - SMTP_SECURE=${SMTP_SECURE}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASS=${SMTP_PASS}
+      - SMTP_FROM=${SMTP_FROM}
+      - APP_URL=${APP_URL}
     command: sh -c "npm run migration:run && npm run seed && npm run start:dev"
     depends_on:
       sportportal-db:
@@ -48,6 +56,7 @@ services:
       - /app/node_modules
     environment:
       - CHOKIDAR_USEPOLLING=true
+      - BACKEND_URL=http://sportportal-backend:8080
     command: npm run dev
     depends_on:
       - sportportal-backend

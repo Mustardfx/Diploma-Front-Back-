@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
 import { apiAuthService } from '../services/apiAuthService';
+import { apiUserService } from '../services/apiUserService';
 import { authService } from '../services/authService';
 import type { AuthUser, UserRole } from '../types';
 
@@ -11,7 +12,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>;
   register: (data: RegisterData) => Promise<void>;
   logout: () => void;
-  updateProfile: (updates: Partial<AuthUser>) => void;
+  updateProfile: (updates: Partial<AuthUser>) => Promise<void>;
   hasRole: (...roles: UserRole[]) => boolean;
 }
 
@@ -43,9 +44,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setBackendOnline(true);
           setUser(freshUser);
         })
-        .catch(() => {
-          // Backend offline or token invalid — keep cached user (localStorage mode)
-          setBackendOnline(false);
+        .catch((err) => {
+          const msg = (err as Error).message ?? '';
+          // Сетевая ошибка → бэкенд недоступен, остаёмся в offline-режиме с кэшем.
+          // Любая иная (истёкшая/невалидная сессия) → чистим, чтобы не показывать
+          // чужого/устаревшего пользователя (источник «подмены аккаунта» при рефреше).
+          if (msg.includes('Нет соединения')) {
+            setBackendOnline(false);
+          } else {
+            apiAuthService.logout();
+            setUser(null);
+            setBackendOnline(false);
+          }
         })
         .finally(() => setIsLoading(false));
     } else {
@@ -108,10 +118,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   };
 
-  const updateProfile = (updates: Partial<AuthUser>) => {
+  const updateProfile = async (updates: Partial<AuthUser>) => {
     if (!user) return;
     if (backendOnline) {
-      const updated = { ...user, ...updates };
+      // Persist to the database; fall back to local cache only if the request fails.
+      const { id: _id, role: _role, ...profile } = updates;
+      const updated = await apiUserService.update(user.id, profile);
       localStorage.setItem('sport_app_current_user', JSON.stringify(updated));
       setUser(updated);
     } else {

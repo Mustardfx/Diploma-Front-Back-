@@ -1,7 +1,7 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { MainLayout } from '../../components/layout/MainLayout';
 import { useAuth } from '../../context/AuthContext';
-import { authService } from '../../services/authService';
+import { apiUserService } from '../../services/apiUserService';
 import type { AuthUser, UserRole } from '../../types';
 
 const ROLES: { value: UserRole; label: string; color: string }[] = [
@@ -18,18 +18,22 @@ function getRoleConfig(role: UserRole) {
 function AddUserModal({ onClose, onSave }: { onClose: () => void; onSave: () => void }) {
   const [form, setForm] = useState({ lastName: '', firstName: '', patronymic: '', email: '', phone: '', password: '12345678', role: 'athlete' as UserRole });
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const set = (field: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm(p => ({ ...p, [field]: e.target.value }));
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setLoading(true);
     try {
-      authService.createUser({ ...form, role: form.role });
+      await apiUserService.create({ ...form, role: form.role });
       onSave();
       onClose();
-    } catch (err) { setError((err as Error).message); }
+    } catch (err) { setError((err as Error).message); } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -76,8 +80,8 @@ function AddUserModal({ onClose, onSave }: { onClose: () => void; onSave: () => 
           </div>
           {error && <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-3 py-2.5 text-red-400 text-sm">{error}</div>}
           <div className="flex gap-3 pt-1">
-            <button type="button" onClick={onClose} className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-sm">Отмена</button>
-            <button type="submit" className="flex-1 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-xl text-sm">Создать</button>
+            <button type="button" onClick={onClose} disabled={loading} className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-sm disabled:opacity-40">Отмена</button>
+            <button type="submit" disabled={loading} className="flex-1 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-xl text-sm disabled:opacity-40">{loading ? 'Создание...' : 'Создать'}</button>
           </div>
         </form>
       </div>
@@ -93,8 +97,24 @@ export function AdminUsersPage() {
   const [tick, setTick] = useState(0);
   const [notification, setNotification] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
   const [expandedUser, setExpandedUser] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [users, setUsers] = useState<AuthUser[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  const users: AuthUser[] = useMemo(() => authService.getAllUsers(), [tick]);
+  useEffect(() => {
+    const loadUsers = async () => {
+      setLoading(true);
+      try {
+        const allUsers = await apiUserService.getAll();
+        setUsers(allUsers);
+      } catch (error) {
+        console.error('Ошибка загрузки пользователей:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    void loadUsers();
+  }, [tick]);
 
   const filtered = useMemo(() => users.filter(u => {
     if (roleFilter !== 'all' && u.role !== roleFilter) return false;
@@ -107,11 +127,28 @@ export function AdminUsersPage() {
     setTimeout(() => setNotification(null), 3000);
   };
 
-  const handleRoleChange = (userId: string, newRole: UserRole) => {
+  const handleRoleChange = async (userId: string, newRole: UserRole) => {
     if (userId === currentUser?.id) { notify('Нельзя изменить роль самому себе', 'error'); return; }
-    authService.updateProfile(userId, { role: newRole } as never);
-    setTick(n => n + 1);
-    notify('Роль обновлена', 'success');
+    try {
+      await apiUserService.update(userId, { role: newRole });
+      setTick(n => n + 1);
+      notify('Роль обновлена', 'success');
+    } catch (error) {
+      notify((error as Error).message, 'error');
+    }
+  };
+
+  const handleDelete = async (userId: string) => {
+    if (userId === currentUser?.id) { notify('Нельзя удалить самого себя', 'error'); return; }
+    try {
+      await apiUserService.delete(userId);
+      setConfirmDeleteId(null);
+      setExpandedUser(null);
+      setTick(n => n + 1);
+      notify('Пользователь удалён', 'success');
+    } catch (error) {
+      notify((error as Error).message, 'error');
+    }
   };
 
   const roleCount = useMemo(() => {
@@ -126,7 +163,7 @@ export function AdminUsersPage() {
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-3xl font-black text-white">Пользователи</h1>
-            <p className="text-slate-400 mt-1">Всего: {users.length}</p>
+            <p className="text-slate-400 mt-1">Всего: {loading ? '...' : users.length}</p>
           </div>
           <button onClick={() => setShowAddModal(true)}
             className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-xl text-sm transition-colors">
@@ -212,6 +249,37 @@ export function AdminUsersPage() {
                           ))}
                         </div>
                       </div>
+                    </div>
+
+                    {/* Danger zone */}
+                    <div className="mt-4 pt-4 border-t border-slate-800 flex items-center justify-between gap-3">
+                      {confirmDeleteId === u.id ? (
+                        <>
+                          <span className="text-red-400 text-xs">Удалить «{u.lastName} {u.firstName}»? Действие необратимо.</span>
+                          <div className="flex gap-2 flex-shrink-0">
+                            <button
+                              onClick={() => setConfirmDeleteId(null)}
+                              className="text-xs px-3 py-1.5 rounded-lg border bg-slate-800 border-slate-700 text-slate-300 hover:text-white transition-colors">
+                              Отмена
+                            </button>
+                            <button
+                              onClick={() => handleDelete(u.id)}
+                              className="text-xs px-3 py-1.5 rounded-lg border bg-red-500 border-red-500 text-white font-medium hover:bg-red-400 transition-colors">
+                              Да, удалить
+                            </button>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-slate-500 text-xs">{isCurrentUser ? 'Свой аккаунт удалить нельзя' : 'Удаление пользователя необратимо'}</span>
+                          <button
+                            onClick={() => setConfirmDeleteId(u.id)}
+                            disabled={isCurrentUser}
+                            className="text-xs px-3 py-1.5 rounded-lg border bg-red-500/10 border-red-500/20 text-red-400 hover:bg-red-500/20 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+                            Удалить пользователя
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
                 )}

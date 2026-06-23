@@ -1,13 +1,13 @@
 import { Controller, Get, Post, Param, Query, Body, UseGuards } from '@nestjs/common';
 import { AttendanceService } from './attendance.service';
 import { MarkAttendanceDto } from './dto/attendance.dto';
-import {  } from '../common/guards/jwt-auth.guard';
+import { Jwt } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { UserRole } from '../common/enums/user-role.enum';
 
 @Controller('attendance')
-@UseGuards()
+@UseGuards(Jwt)
 export class AttendanceController {
   constructor(private readonly attendanceService: AttendanceService) {}
 

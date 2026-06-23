@@ -31,3 +31,26 @@ export class RegisterDto {
   @IsString()
   phone?: string;
 }
+
+export class ForgotPasswordDto {
+  @IsEmail({}, { message: 'Некорректный email' })
+  email: string;
+}
+
+export class ResetPasswordDto {
+  @IsString()
+  token: string;
+
+  @IsString()
+  @MinLength(6, { message: 'Пароль минимум 6 символов' })
+  password: string;
+}
+
+export class ChangePasswordDto {
+  @IsString()
+  currentPassword: string;
+
+  @IsString()
+  @MinLength(6, { message: 'Пароль минимум 6 символов' })
+  newPassword: string;
+}

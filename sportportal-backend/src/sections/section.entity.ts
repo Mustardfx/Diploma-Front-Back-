@@ -54,4 +54,7 @@ export class Section {
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
+
+  // Не хранится в БД — заполняется сервисом (кол-во активных записей)
+  enrolledCount?: number;
 }

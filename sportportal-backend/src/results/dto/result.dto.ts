@@ -1,4 +1,4 @@
-import { IsUUID, IsString, IsNumber, IsOptional, IsInt, Min } from 'class-validator';
+import { IsUUID, IsString, IsNumber, IsOptional, IsInt, Min, IsDateString } from 'class-validator';
 
 export class CreateResultDto {
   @IsUUID()
@@ -21,6 +21,24 @@ export class CreateResultDto {
   @IsOptional()
   @IsNumber()
   score?: number;
+
+  @IsOptional()
+  @IsString()
+  notes?: string;
+}
+
+export class LessonPointsDto {
+  @IsUUID()
+  sectionId: string;
+
+  @IsUUID()
+  userId: string;
+
+  @IsDateString()
+  lessonDate: string;
+
+  @IsNumber()
+  score: number;
 
   @IsOptional()
   @IsString()

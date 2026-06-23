@@ -16,6 +16,11 @@ export class RegistrationsService {
     private readonly competitionsService: CompetitionsService,
   ) {}
 
+  // Все регистрации (без relations — только id/статусы, для счётчиков и проверки «я записан»)
+  findAll(): Promise<CompetitionRegistration[]> {
+    return this.repo.find({ order: { registeredAt: 'DESC' } });
+  }
+
   findByUser(userId: string): Promise<CompetitionRegistration[]> {
     return this.repo.find({
       where: { userId },

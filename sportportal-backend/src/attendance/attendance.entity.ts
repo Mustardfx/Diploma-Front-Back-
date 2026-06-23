@@ -41,6 +41,10 @@ export class Attendance {
   @Column({ type: 'varchar', nullable: true })
   note: string;
 
+  // Момент отметки присутствия (timestamp). Заполняется при present=true.
+  @Column({ name: 'checked_in_at', type: 'timestamptz', nullable: true })
+  checkedInAt: Date | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 }

@@ -14,6 +14,13 @@ import { UserRole } from '../common/enums/user-role.enum';
 export class EnrollmentsController {
   constructor(private readonly enrollmentsService: EnrollmentsService) {}
 
+  @Get()
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.COACH, UserRole.ADMIN)
+  findAll() {
+    return this.enrollmentsService.findAll();
+  }
+
   @Get('my')
   findMine(@CurrentUser('id') userId: string) {
     return this.enrollmentsService.findByUser(userId);

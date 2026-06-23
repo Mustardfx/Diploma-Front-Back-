@@ -1,21 +1,106 @@
-import { useState } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useState, useEffect, useCallback } from 'react';
+import { useParams, Link } from 'react-router-dom';
 import { MainLayout } from '../../components/layout/MainLayout';
 import { useAuth } from '../../context/AuthContext';
-import { sectionService, enrollmentService, attendanceService } from '../../services/sectionService';
-import { authService } from '../../services/authService';
+import {
+  apiSectionService,
+  apiEnrollmentService,
+  apiAttendanceService,
+} from '../../services/apiSectionService';
+import type { Section, Enrollment } from '../../types';
 
 const DAY_NAMES = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота', 'Воскресенье'];
 
+type Stats = { total: number; present: number; percent: number };
+
 export function SectionDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
   const { user, hasRole } = useAuth();
-  const [tick, setTick] = useState(0);
+  const canManage = hasRole('coach', 'admin');
+  const isAthlete = hasRole('athlete');
+
+  const [section, setSection] = useState<Section | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
+
+  const [participants, setParticipants] = useState<Enrollment[]>([]);
+  const [statsByUser, setStatsByUser] = useState<Record<string, Stats>>({});
+  const [myEnrollment, setMyEnrollment] = useState<Enrollment | null>(null);
+
+  const [busy, setBusy] = useState(false);
   const [notification, setNotification] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
 
-  const section = id ? sectionService.getById(id) : null;
-  if (!section) {
+  const notify = (msg: string, type: 'success' | 'error') => {
+    setNotification({ msg, type });
+    setTimeout(() => setNotification(null), 3000);
+  };
+
+  const load = useCallback(async () => {
+    if (!id) return;
+    setLoading(true);
+    try {
+      const sec = await apiSectionService.getById(id);
+      setSection(sec);
+
+      if (canManage) {
+        const enrs = await apiEnrollmentService.getBySection(id);
+        setParticipants(enrs);
+        const pairs = await Promise.all(
+          enrs.map(async (e) => {
+            try {
+              return [e.userId, await apiAttendanceService.getUserStats(e.userId, id)] as const;
+            } catch {
+              return [e.userId, { total: 0, present: 0, percent: 0 }] as const;
+            }
+          }),
+        );
+        setStatsByUser(Object.fromEntries(pairs));
+      } else if (isAthlete) {
+        const mine = await apiEnrollmentService.getMine();
+        setMyEnrollment(mine.find((e) => e.sectionId === id && e.status === 'active') ?? null);
+      }
+    } catch (e) {
+      const msg = (e as Error).message;
+      if (msg.includes('не найден')) setNotFound(true);
+      else notify(msg, 'error');
+    } finally {
+      setLoading(false);
+    }
+  }, [id, canManage, isAthlete]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const handleEnroll = async () => {
+    if (!user || !section) return;
+    setBusy(true);
+    try {
+      await apiEnrollmentService.enroll(section.id);
+      notify('Вы записаны на секцию!', 'success');
+      await load();
+    } catch (e) { notify((e as Error).message, 'error'); }
+    finally { setBusy(false); }
+  };
+
+  const handleCancel = async () => {
+    if (!myEnrollment) return notify('Запись не найдена', 'error');
+    setBusy(true);
+    try {
+      await apiEnrollmentService.cancel(myEnrollment.id);
+      notify('Запись отменена', 'success');
+      await load();
+    } catch (e) { notify((e as Error).message, 'error'); }
+    finally { setBusy(false); }
+  };
+
+  if (loading) {
+    return (
+      <MainLayout>
+        <div className="text-center py-20 text-slate-500">Загрузка секции…</div>
+      </MainLayout>
+    );
+  }
+
+  if (notFound || !section) {
     return (
       <MainLayout>
         <div className="text-center py-20 text-slate-400">
@@ -27,35 +112,10 @@ export function SectionDetailPage() {
     );
   }
 
-  const coach = authService.getUserById(section.coachId);
-  const enrollments = enrollmentService.getSectionEnrollments(section.id);
-  const enrolledCount = enrollments.length;
+  const coach = section.coach;
+  const enrolledCount = section.enrolledCount ?? participants.length;
   const full = enrolledCount >= section.maxParticipants;
-  const isEnrolled = user ? enrollmentService.isEnrolled(user.id, section.id) : false;
-  const canManage = hasRole('coach', 'admin');
-
-  const notify = (msg: string, type: 'success' | 'error') => {
-    setNotification({ msg, type });
-    setTimeout(() => setNotification(null), 3000);
-  };
-
-  const handleEnroll = () => {
-    if (!user) return;
-    try {
-      enrollmentService.enroll(user.id, section.id);
-      setTick(n => n + 1);
-      notify('Вы записаны на секцию!', 'success');
-    } catch (e) { notify((e as Error).message, 'error'); }
-  };
-
-  const handleCancel = () => {
-    if (!user) return;
-    try {
-      enrollmentService.cancel(user.id, section.id);
-      setTick(n => n + 1);
-      notify('Запись отменена', 'success');
-    } catch (e) { notify((e as Error).message, 'error'); }
-  };
+  const isEnrolled = !!myEnrollment;
 
   return (
     <MainLayout>
@@ -89,7 +149,7 @@ export function SectionDetailPage() {
                 </div>
                 {section.price && (
                   <div className="text-right">
-                    <div className="text-2xl font-black text-emerald-400">{section.price.toLocaleString()} ₸</div>
+                    <div className="text-2xl font-black text-emerald-400">{Number(section.price).toLocaleString()} ₸</div>
                     <div className="text-slate-500 text-xs">в месяц</div>
                   </div>
                 )}
@@ -101,7 +161,7 @@ export function SectionDetailPage() {
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
               <h2 className="text-white font-bold mb-4">Расписание</h2>
               <div className="space-y-2">
-                {section.schedule.map((s, i) => (
+                {(section.schedule ?? []).map((s, i) => (
                   <div key={i} className="flex items-center justify-between py-2.5 px-4 bg-slate-800 rounded-xl">
                     <span className="text-white font-medium">{DAY_NAMES[s.dayOfWeek]}</span>
                     <span className="text-emerald-400 font-mono">{s.timeStart} — {s.timeEnd}</span>
@@ -113,29 +173,28 @@ export function SectionDetailPage() {
             {/* Participants (for coach/admin) */}
             {canManage && (
               <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
-                <h2 className="text-white font-bold mb-4">Участники ({enrolledCount})</h2>
-                {enrollments.length === 0 ? (
+                <h2 className="text-white font-bold mb-4">Участники ({participants.length})</h2>
+                {participants.length === 0 ? (
                   <p className="text-slate-500 text-sm">Нет записанных участников</p>
                 ) : (
                   <div className="space-y-2">
-                    {enrollments.map(enrollment => {
-                      const u = authService.getUserById(enrollment.userId);
-                      const stats = attendanceService.getUserStats(enrollment.userId, section.id);
-                      if (!u) return null;
+                    {participants.map((enrollment) => {
+                      const u = enrollment.user;
+                      const stats = statsByUser[enrollment.userId] ?? { total: 0, present: 0, percent: 0 };
                       return (
                         <div key={enrollment.id} className="flex items-center justify-between py-2.5 px-4 bg-slate-800 rounded-xl">
                           <div className="flex items-center gap-3">
                             <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-slate-300 text-xs font-bold">
-                              {u.firstName[0]}{u.lastName[0]}
+                              {u?.firstName?.[0] ?? '?'}{u?.lastName?.[0] ?? ''}
                             </div>
                             <div>
-                              <div className="text-white text-sm font-medium">{u.lastName} {u.firstName}</div>
-                              <div className="text-slate-500 text-xs">{u.email}</div>
+                              <div className="text-white text-sm font-medium">{u ? `${u.lastName} ${u.firstName}` : enrollment.userId}</div>
+                              {u?.email && <div className="text-slate-500 text-xs">{u.email}</div>}
                             </div>
                           </div>
                           <div className="text-right">
-                            <div className={`text-sm font-bold ${stats.percent >= 75 ? 'text-emerald-400' : stats.percent >= 50 ? 'text-yellow-400' : 'text-red-400'}`}>
-                              {stats.percent}%
+                            <div className={`text-sm font-bold ${stats.total === 0 ? 'text-slate-500' : stats.percent >= 75 ? 'text-emerald-400' : stats.percent >= 50 ? 'text-yellow-400' : 'text-red-400'}`}>
+                              {stats.total > 0 ? `${stats.percent}%` : '—'}
                             </div>
                             <div className="text-slate-500 text-xs">{stats.present}/{stats.total} занятий</div>
                           </div>
@@ -166,11 +225,11 @@ export function SectionDetailPage() {
 
               {!canManage && section.isActive && (
                 isEnrolled ? (
-                  <button onClick={handleCancel} className="w-full py-3 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded-xl transition-colors font-medium">
+                  <button onClick={handleCancel} disabled={busy} className="w-full py-3 bg-red-500/10 hover:bg-red-500/20 disabled:opacity-40 text-red-400 border border-red-500/20 rounded-xl transition-colors font-medium">
                     Отменить запись
                   </button>
                 ) : (
-                  <button onClick={handleEnroll} disabled={full} className="w-full py-3 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 text-slate-950 font-bold rounded-xl transition-colors">
+                  <button onClick={handleEnroll} disabled={full || busy} className="w-full py-3 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 text-slate-950 font-bold rounded-xl transition-colors">
                     {full ? 'Мест нет' : 'Записаться'}
                   </button>
                 )
@@ -188,7 +247,7 @@ export function SectionDetailPage() {
               {coach ? (
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-full bg-blue-500/20 border border-blue-500/30 flex items-center justify-center text-blue-400 font-bold text-sm">
-                    {coach.firstName[0]}{coach.lastName[0]}
+                    {coach.firstName?.[0] ?? '?'}{coach.lastName?.[0] ?? ''}
                   </div>
                   <div>
                     <div className="text-white font-medium text-sm">{coach.lastName} {coach.firstName}</div>

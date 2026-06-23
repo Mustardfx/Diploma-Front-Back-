@@ -14,7 +14,13 @@ export const apiSectionService = {
     return data;
   },
 
-  async create(payload: Omit<Section, 'id' | 'createdAt'>): Promise<Section> {
+  // Секции текущего тренера (GET /sections/my)
+  async getMine(): Promise<Section[]> {
+    const { data } = await api.get<Section[]>('/sections/my');
+    return data;
+  },
+
+  async create(payload: Partial<Section>): Promise<Section> {
     const { data } = await api.post<Section>('/sections', payload);
     return data;
   },
@@ -76,6 +82,7 @@ export const apiAttendanceService = {
   },
 
   async mark(records: Omit<AttendanceRecord, 'id'>[]): Promise<void> {
-    await api.post('/attendance/mark', records);
+    // Бэк ждёт MarkAttendanceDto: { records: [...] }
+    await api.post('/attendance/mark', { records });
   },
 };

@@ -1,9 +1,12 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { MainLayout } from '../../components/layout/MainLayout';
 import { useAuth } from '../../context/AuthContext';
-import { competitionService } from '../../services/competitionService';
-import type { Competition, CompetitionCategory } from '../../types';
+import { apiCompetitionService, apiCompRegistrationService } from '../../services/apiCompetitionService';
+import type { Competition, CompetitionCategory, CompetitionRegistration } from '../../types';
+
+const formatDate = (dateStr: string) =>
+  new Date(dateStr).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
 
 const STATUS_OPTIONS: { value: Competition['status']; label: string }[] = [
   { value: 'upcoming', label: 'Предстоит' },
@@ -105,10 +108,10 @@ function CompetitionForm({ initial, organizerId, onSave, onCancel }: {
         </div>
         <div className="space-y-2">
           {categories.map(cat => (
-            <div key={cat.id} className="grid grid-cols-4 gap-2 items-center">
-              <input value={cat.name} onChange={e => updateCategory(cat.id, 'name', e.target.value)} placeholder="Название категории *" className="col-span-2 px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white text-xs focus:outline-none focus:border-amber-500" />
-              <input value={cat.weightClass ?? ''} onChange={e => updateCategory(cat.id, 'weightClass', e.target.value)} placeholder="Вес (необяз.)" className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white text-xs focus:outline-none focus:border-amber-500" />
-              <button type="button" onClick={() => removeCategory(cat.id)} disabled={categories.length === 1} className="px-3 py-2 bg-red-500/10 text-red-400 rounded-xl text-xs hover:bg-red-500/20 disabled:opacity-30 transition-colors">✕</button>
+            <div key={cat.id} className="grid items-center grid-cols-4 gap-2">
+              <input value={cat.name} onChange={e => updateCategory(cat.id, 'name', e.target.value)} placeholder="Название категории *" className="col-span-2 px-3 py-2 text-xs text-white border bg-slate-800 border-slate-700 rounded-xl focus:outline-none focus:border-amber-500" />
+              <input value={cat.weightClass ?? ''} onChange={e => updateCategory(cat.id, 'weightClass', e.target.value)} placeholder="Вес (необяз.)" className="px-3 py-2 text-xs text-white border bg-slate-800 border-slate-700 rounded-xl focus:outline-none focus:border-amber-500" />
+              <button type="button" onClick={() => removeCategory(cat.id)} disabled={categories.length === 1} className="px-3 py-2 text-xs text-red-400 transition-colors bg-red-500/10 rounded-xl hover:bg-red-500/20 disabled:opacity-30">✕</button>
             </div>
           ))}
         </div>
@@ -124,41 +127,69 @@ function CompetitionForm({ initial, organizerId, onSave, onCancel }: {
 
 export function AdminCompetitionsPage() {
   const { user } = useAuth();
-  const [tick, setTick] = useState(0);
   const [modal, setModal] = useState<'create' | 'edit' | null>(null);
   const [editing, setEditing] = useState<Competition | null>(null);
   const [notification, setNotification] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+  const [competitions, setCompetitions] = useState<Competition[]>([]);
+  const [registrations, setRegistrations] = useState<CompetitionRegistration[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  if (!user) return null;
-  const competitions = competitionService.getAll();
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [comps, regs] = await Promise.all([
+        apiCompetitionService.getAll(),
+        apiCompRegistrationService.getAll().catch(() => [] as CompetitionRegistration[]),
+      ]);
+      setCompetitions(comps);
+      setRegistrations(regs);
+    } catch (e) {
+      setNotification({ msg: (e as Error).message, type: 'error' });
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const getRegisteredCount = (competitionId: string) =>
+    registrations.filter(r => r.competitionId === competitionId && r.status !== 'rejected' && r.status !== 'withdrawn').length;
 
   const notify = (msg: string, type: 'success' | 'error') => {
     setNotification({ msg, type });
     setTimeout(() => setNotification(null), 3000);
   };
 
-  const handleCreate = (data: Omit<Competition, 'id' | 'createdAt'>) => {
-    competitionService.create(data);
-    setModal(null);
-    setTick(n => n + 1);
-    notify('Соревнование создано!', 'success');
+  const handleCreate = async (data: Omit<Competition, 'id' | 'createdAt'>) => {
+    try {
+      await apiCompetitionService.create(data);
+      setModal(null);
+      await load();
+      notify('Соревнование создано!', 'success');
+    } catch (e) { notify((e as Error).message, 'error'); }
   };
 
-  const handleEdit = (data: Omit<Competition, 'id' | 'createdAt'>) => {
+  const handleEdit = async (data: Omit<Competition, 'id' | 'createdAt'>) => {
     if (!editing) return;
-    competitionService.update(editing.id, data);
-    setModal(null);
-    setEditing(null);
-    setTick(n => n + 1);
-    notify('Соревнование обновлено!', 'success');
+    try {
+      await apiCompetitionService.update(editing.id, data);
+      setModal(null);
+      setEditing(null);
+      await load();
+      notify('Соревнование обновлено!', 'success');
+    } catch (e) { notify((e as Error).message, 'error'); }
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (!confirm('Удалить соревнование?')) return;
-    competitionService.delete(id);
-    setTick(n => n + 1);
-    notify('Удалено', 'success');
+    try {
+      await apiCompetitionService.delete(id);
+      await load();
+      notify('Удалено', 'success');
+    } catch (e) { notify((e as Error).message, 'error'); }
   };
+
+  if (!user) return null;
 
   return (
     <MainLayout>
@@ -166,7 +197,7 @@ export function AdminCompetitionsPage() {
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-3xl font-black text-white">Управление соревнованиями</h1>
-            <p className="text-slate-400 mt-1">Всего: {competitions.length}</p>
+            <p className="mt-1 text-slate-400">{loading ? 'Загрузка…' : `Всего: ${competitions.length}`}</p>
           </div>
           <button onClick={() => { setEditing(null); setModal('create'); }}
             className="px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-sm transition-colors">
@@ -181,19 +212,19 @@ export function AdminCompetitionsPage() {
         )}
 
         {competitions.length === 0 ? (
-          <div className="text-center py-20 bg-slate-900 border border-slate-800 rounded-2xl text-slate-500">
-            <div className="text-4xl mb-3">⚡</div>
+          <div className="py-20 text-center border bg-slate-900 border-slate-800 rounded-2xl text-slate-500">
+            <div className="mb-3 text-4xl">⚡</div>
             <p>Соревнований нет</p>
           </div>
         ) : (
           <div className="space-y-3">
             {competitions.map(comp => {
-              const count = competitionService.getRegisteredCount(comp.id);
+              const count = getRegisteredCount(comp.id);
               return (
-                <div key={comp.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-5 flex items-center gap-4">
+                <div key={comp.id} className="flex items-center gap-4 p-5 border bg-slate-900 border-slate-800 rounded-2xl">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
-                      <h3 className="text-white font-bold truncate">{comp.name}</h3>
+                      <h3 className="font-bold text-white truncate">{comp.name}</h3>
                       <span className={`text-xs px-2 py-0.5 rounded-full border flex-shrink-0 ${STATUS_COLORS[comp.status]}`}>
                         {STATUS_OPTIONS.find(s => s.value === comp.status)?.label}
                       </span>
@@ -201,10 +232,10 @@ export function AdminCompetitionsPage() {
                     <div className="flex items-center gap-4 text-sm text-slate-400">
                       <span>{comp.sport}</span>
                       <span>◎ {count}/{comp.maxParticipants} чел.</span>
-                      <span>◷ {competitionService.formatDate(comp.startDate)}</span>
+                      <span>◷ {formatDate(comp.startDate)}</span>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
+                  <div className="flex items-center flex-shrink-0 gap-2">
                     <Link to={`/competitions/${comp.id}`} className="px-3 py-1.5 text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors">
                       Просмотр
                     </Link>
@@ -225,13 +256,13 @@ export function AdminCompetitionsPage() {
 
         {/* Modal */}
         {modal && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
             <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
               <div className="flex items-center justify-between p-6 border-b border-slate-800">
-                <h2 className="text-white font-bold text-lg">
+                <h2 className="text-lg font-bold text-white">
                   {modal === 'create' ? 'Создать соревнование' : 'Редактировать соревнование'}
                 </h2>
-                <button onClick={() => { setModal(null); setEditing(null); }} className="text-slate-500 hover:text-white text-xl">✕</button>
+                <button onClick={() => { setModal(null); setEditing(null); }} className="text-xl text-slate-500 hover:text-white">✕</button>
               </div>
               <div className="p-6">
                 <CompetitionForm

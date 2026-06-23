@@ -1,18 +1,30 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { MainLayout } from '../../components/layout/MainLayout';
-import { sectionService, enrollmentService } from '../../services/sectionService';
-import { authService } from '../../services/authService';
+import { apiSectionService } from '../../services/apiSectionService';
+import type { Section } from '../../types';
 
 const DAY_NAMES = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 
 export function AdminSectionsPage() {
   const [search, setSearch] = useState('');
   const [onlyActive, setOnlyActive] = useState(false);
-  const [tick, setTick] = useState(0);
   const [notification, setNotification] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+  const [sections, setSections] = useState<Section[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const sections = useMemo(() => sectionService.getAll(), [tick]);
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      setSections(await apiSectionService.getAll());
+    } catch (e) {
+      setNotification({ msg: (e as Error).message, type: 'error' });
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { void load(); }, [load]);
 
   const filtered = useMemo(() => sections.filter(s => {
     if (onlyActive && !s.isActive) return false;
@@ -25,20 +37,24 @@ export function AdminSectionsPage() {
     setTimeout(() => setNotification(null), 3000);
   };
 
-  const handleToggle = (id: string, current: boolean) => {
-    sectionService.update(id, { isActive: !current });
-    setTick(n => n + 1);
-    notify(`Секция ${!current ? 'активирована' : 'деактивирована'}`, 'success');
+  const handleToggle = async (id: string, current: boolean) => {
+    try {
+      await apiSectionService.update(id, { isActive: !current });
+      await load();
+      notify(`Секция ${!current ? 'активирована' : 'деактивирована'}`, 'success');
+    } catch (e) { notify((e as Error).message, 'error'); }
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (!confirm('Удалить секцию?')) return;
-    sectionService.delete(id);
-    setTick(n => n + 1);
-    notify('Секция удалена', 'success');
+    try {
+      await apiSectionService.delete(id);
+      await load();
+      notify('Секция удалена', 'success');
+    } catch (e) { notify((e as Error).message, 'error'); }
   };
 
-  const totalEnrolled = sections.reduce((sum, s) => sum + sectionService.getEnrolledCount(s.id), 0);
+  const totalEnrolled = sections.reduce((sum, s) => sum + (s.enrolledCount ?? 0), 0);
 
   return (
     <MainLayout>
@@ -46,7 +62,7 @@ export function AdminSectionsPage() {
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-3xl font-black text-white">Управление секциями</h1>
-            <p className="text-slate-400 mt-1">Всего: {sections.length} · Записей: {totalEnrolled}</p>
+            <p className="text-slate-400 mt-1">{loading ? 'Загрузка…' : `Всего: ${sections.length} · Записей: ${totalEnrolled}`}</p>
           </div>
           <Link to="/coach/sections" className="px-5 py-2.5 bg-blue-500 hover:bg-blue-400 text-white font-bold rounded-xl text-sm transition-colors">
             + Создать секцию
@@ -94,13 +110,15 @@ export function AdminSectionsPage() {
             <div className="col-span-2 text-right">Действия</div>
           </div>
 
-          {filtered.length === 0 ? (
+          {loading ? (
+            <div className="text-center py-12 text-slate-500">Загрузка…</div>
+          ) : filtered.length === 0 ? (
             <div className="text-center py-12 text-slate-500">Секции не найдены</div>
           ) : (
             <div className="divide-y divide-slate-800">
               {filtered.map(section => {
-                const coach = authService.getUserById(section.coachId);
-                const enrolled = sectionService.getEnrolledCount(section.id);
+                const coach = section.coach;
+                const enrolled = section.enrolledCount ?? 0;
                 const pct = Math.round((enrolled / section.maxParticipants) * 100);
 
                 return (
@@ -110,10 +128,10 @@ export function AdminSectionsPage() {
                       <div className="text-slate-500 text-xs mt-0.5">{section.sport}</div>
                     </div>
                     <div className="col-span-2 text-slate-400 text-sm">
-                      {coach ? `${coach.lastName} ${coach.firstName[0]}.` : '—'}
+                      {coach ? `${coach.lastName} ${coach.firstName?.[0] ?? ''}.` : '—'}
                     </div>
                     <div className="col-span-2 text-slate-400 text-xs">
-                      {section.schedule.map(s => DAY_NAMES[s.dayOfWeek]).join(', ')}
+                      {(section.schedule ?? []).map(s => DAY_NAMES[s.dayOfWeek]).join(', ')}
                     </div>
                     <div className="col-span-2">
                       <div className="flex items-center gap-2">
