@@ -1,10 +1,8 @@
 import { useState, useEffect } from 'react';
 import { MainLayout } from '../../components/layout/MainLayout';
 import { useAuth } from '../../context/AuthContext';
-import { authService } from '../../services/authService';
 import { apiCompetitionService, apiCompRegistrationService, apiCompResultService } from '../../services/apiCompetitionService';
 import { apiUserService } from '../../services/apiUserService';
-import { competitionService, compRegistrationService, compResultService } from '../../services/competitionService';
 import type { AuthUser, Competition, CompetitionRegistration, CompetitionResult } from '../../types';
 
 const PLACE_COLORS = ['', 'bg-yellow-500 text-slate-950', 'bg-slate-400 text-slate-950', 'bg-amber-700 text-white'];
@@ -30,20 +28,22 @@ export function JudgePanelPage() {
     async function load() {
       setLoading(true);
       try {
-        const [comps, regs] = await Promise.all([
-          apiCompetitionService.getAll().catch(() => []),
-          apiCompRegistrationService.getAll().catch(() => []),
+        // Только данные из БД — у localStorage-сида id вида comp_/cr_, которые не UUID и не сохранятся.
+        const [comps, regs, allUsers] = await Promise.all([
+          apiCompetitionService.getAll(),
+          apiCompRegistrationService.getAll(),
+          apiUserService.getAll().catch(() => [] as AuthUser[]),
         ]);
         if (!cancelled) {
-          setCompetitions(comps.length > 0 ? comps.filter(isJudgeable) : competitionService.getAll().filter(isJudgeable));
-          setAllRegs(regs.length > 0 ? regs : compRegistrationService.getAll());
-          setUsers(await apiUserService.getAll().catch(() => authService.getAllUsers()));
+          setCompetitions(comps.filter(isJudgeable));
+          setAllRegs(regs);
+          setUsers(allUsers);
         }
-      } catch {
+      } catch (e) {
         if (!cancelled) {
-          setCompetitions(competitionService.getAll().filter(isJudgeable));
-          setAllRegs(compRegistrationService.getAll());
-          setUsers(authService.getAllUsers());
+          setCompetitions([]);
+          setAllRegs([]);
+          setNotification({ msg: (e as Error).message, type: 'error' });
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -58,10 +58,10 @@ export function JudgePanelPage() {
     let cancelled = false;
     async function loadResults() {
       try {
-        const res = await apiCompResultService.getByCompetition(selectedComp).catch(() => compResultService.getCompetitionResults(selectedComp));
+        const res = await apiCompResultService.getByCompetition(selectedComp);
         if (!cancelled) setAllResults(res);
       } catch {
-        if (!cancelled) setAllResults(compResultService.getCompetitionResults(selectedComp));
+        if (!cancelled) setAllResults([]);
       }
     }
     loadResults();
@@ -110,7 +110,6 @@ export function JudgePanelPage() {
             place: s.place ? parseInt(s.place) : undefined,
             score: s.score ? parseFloat(s.score) : undefined,
             notes: s.notes || undefined,
-            judgeId: user.id,
           })];
         }),
       );

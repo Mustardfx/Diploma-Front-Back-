@@ -291,17 +291,17 @@ function JudgeDashboard() {
       setLoading(true);
       try {
         const [c, r] = await Promise.all([
-          apiCompetitionService.getAll().catch(() => []),
-          apiCompRegistrationService.getAll().catch(() => []),
+          apiCompetitionService.getAll(),
+          apiCompRegistrationService.getAll(),
         ]);
         if (!cancelled) {
-          setComps(c.length > 0 ? c.filter(c => c.status === 'ongoing' || c.status === 'upcoming') : competitionService.getAll().filter(c => c.status === 'ongoing' || c.status === 'upcoming'));
-          setRegs(r.length > 0 ? r : compRegistrationService.getAll());
+          setComps(c.filter(c => c.status === 'ongoing' || c.status === 'upcoming'));
+          setRegs(r);
         }
       } catch {
         if (!cancelled) {
-          setComps(competitionService.getAll().filter(c => c.status === 'ongoing' || c.status === 'upcoming'));
-          setRegs(compRegistrationService.getAll());
+          setComps([]);
+          setRegs([]);
         }
       } finally {
         if (!cancelled) setLoading(false);

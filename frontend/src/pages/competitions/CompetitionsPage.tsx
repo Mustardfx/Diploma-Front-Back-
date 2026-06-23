@@ -4,7 +4,6 @@ import { MainLayout } from '../../components/layout/MainLayout';
 import { useAuth } from '../../context/AuthContext';
 import { apiCompetitionService, apiCompRegistrationService } from '../../services/apiCompetitionService';
 import { apiLessonPointsService } from '../../services/apiCompetitionService';
-import { competitionService, compRegistrationService } from '../../services/competitionService';
 import type { Competition, CompetitionRegistration, LeaderboardRow } from '../../types';
 
 const SPORTS = ['Все', 'Борьба', 'Бокс', 'Плавание', 'Лёгкая атлетика'];
@@ -40,14 +39,15 @@ export function CompetitionsPage() {
       setLoading(true);
       try {
         const [comps, regs] = await Promise.all([
-          apiCompetitionService.getAll().catch(() => []),
-          apiCompRegistrationService.getAll().catch(() => []),
+          apiCompetitionService.getAll(),
+          apiCompRegistrationService.getAll(),
         ]);
-        setCompetitions(comps.length > 0 ? comps : competitionService.getAll());
-        setRegistrations(regs.length > 0 ? regs : compRegistrationService.getAll());
-      } catch {
-        setCompetitions(competitionService.getAll());
-        setRegistrations(compRegistrationService.getAll());
+        setCompetitions(comps);
+        setRegistrations(regs);
+      } catch (e) {
+        setCompetitions([]);
+        setRegistrations([]);
+        notify((e as Error).message, 'error');
       } finally {
         if (!cancelled) setLoading(false);
       }

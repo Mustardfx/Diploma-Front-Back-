@@ -1,6 +1,6 @@
 import {
   Controller, Get, Post, Patch, Delete,
-  Param, Body, Query, UseGuards, HttpCode, HttpStatus,
+  Param, Body, Query, UseGuards, HttpCode, HttpStatus, ParseUUIDPipe,
 } from '@nestjs/common';
 import { CompetitionsService } from './competitions.service';
 import {
@@ -25,7 +25,7 @@ export class CompetitionsController {
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
+  findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.competitionsService.findOne(id);
   }
 
@@ -43,7 +43,7 @@ export class CompetitionsController {
   @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN)
   update(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateCompetitionDto,
   ) {
     return this.competitionsService.update(id, dto);
@@ -53,7 +53,7 @@ export class CompetitionsController {
   @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN)
   @HttpCode(HttpStatus.NO_CONTENT)
-  remove(@Param('id') id: string) {
+  remove(@Param('id', ParseUUIDPipe) id: string) {
     return this.competitionsService.remove(id);
   }
 }

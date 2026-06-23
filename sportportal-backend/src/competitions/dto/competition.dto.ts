@@ -5,7 +5,13 @@ import {
 import { Type } from 'class-transformer';
 import { CompetitionStatus, CompetitionCategory } from '../competition.entity';
 
-export class CategoryDto implements Omit<CompetitionCategory, 'id'> {
+export class CategoryDto implements Partial<CompetitionCategory> {
+  // Фронт присылает id (cat_… при создании или реальный uuid при редактировании).
+  // При создании сервис перезапишет его на uuid, при обновлении — сохранит существующий.
+  @IsOptional()
+  @IsString()
+  id?: string;
+
   @IsString()
   name: string;
 

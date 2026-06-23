@@ -55,7 +55,7 @@ export function MainLayout({ children }: MainLayoutProps) {
   );
 
   return (
-    <div className="min-h-screen bg-slate-950 flex font-sans">
+    <div className="h-screen overflow-hidden bg-slate-950 flex font-sans">
       {/* Sidebar */}
       <aside className={`
         ${sidebarOpen ? 'w-60' : 'w-16'} 
@@ -75,7 +75,7 @@ export function MainLayout({ children }: MainLayoutProps) {
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 py-4 px-2 space-y-1">
+        <nav className="flex-1 py-4 px-2 space-y-1 overflow-y-auto">
           {visibleNav.map(item => {
             const active = location.pathname === item.path;
             return (

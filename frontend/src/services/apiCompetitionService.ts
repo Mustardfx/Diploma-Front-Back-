@@ -99,7 +99,9 @@ export const apiCompResultService = {
   async save(
     payload: Omit<CompetitionResult, 'id' | 'recordedAt'>,
   ): Promise<CompetitionResult> {
-    const { data } = await api.post<CompetitionResult>('/results', payload);
+    // judgeId проставляет бэкенд из токена; DTO его запрещает (forbidNonWhitelisted).
+    const { judgeId: _judgeId, ...body } = payload;
+    const { data } = await api.post<CompetitionResult>('/results', body);
     return data;
   },
 
